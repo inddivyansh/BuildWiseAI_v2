@@ -24,6 +24,8 @@ import {
 } from "@/components/ui/select";
 import { generateFloorPlan, listZones, listProjects, api, type ProjectSummary } from "@/lib/api";
 import { useFloorPlanStore } from "@/stores/floorPlanStore";
+import { useModelStore } from "@/stores/modelStore";
+import { ModelSelector } from "@/components/editor/ModelSelector";
 import { FolderKanban } from "lucide-react";
 import { toast } from "sonner";
 
@@ -114,6 +116,9 @@ export function GenerateDialog({ open, onOpenChange, projectId }: Props) {
       }
       setActiveTargetProjectId(targetProjectId);
 
+      const { selectedModelId, getSelectedModel } = useModelStore.getState();
+      const activeModel = getSelectedModel();
+
       generateMutation.mutate({
         prompt,
         project_id: targetProjectId,
@@ -122,6 +127,8 @@ export function GenerateDialog({ open, onOpenChange, projectId }: Props) {
         zone_id: zoneId || undefined,
         generator,
         run_compliance: runCompliance,
+        model: selectedModelId,
+        provider: activeModel?.provider,
       });
     } catch (err: any) {
       setGenerating(false);
@@ -252,6 +259,18 @@ export function GenerateDialog({ open, onOpenChange, projectId }: Props) {
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          {/* AI Model (Free-Tier Prioritized) */}
+          <div className="flex flex-col gap-1.5 p-3 rounded-lg border border-border/60 bg-muted/20">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-medium text-foreground">AI Model (Free Tier)</Label>
+              <span className="text-[10px] text-emerald-400 font-medium">Free Tier Active</span>
+            </div>
+            <ModelSelector className="w-full" />
+            <p className="text-[10px] text-muted-foreground">
+              Select among supported free-tier and local AI models for architectural layout extraction.
+            </p>
           </div>
 
           {/* Generator + Compliance row */}

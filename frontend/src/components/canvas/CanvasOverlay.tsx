@@ -14,6 +14,7 @@ import { useFloorPlanStore } from "@/stores/floorPlanStore";
 import { useEditorStore } from "@/stores/editorStore";
 import { ExportMenu } from "@/components/editor/ExportMenu";
 import { useSendToAuditAction } from "@/hooks/useFloorPlanActions";
+import { ModelSelector } from "@/components/editor/ModelSelector";
 
 export interface CanvasOverlayProps {
   projectId?: string;
@@ -142,6 +143,9 @@ export function CanvasOverlay({
               3D
             </button>
           </div>
+
+          {/* AI Model selector pill */}
+          <ModelSelector compact />
         </div>
 
         {/* Right: compliance badge + send to audit + export + zoom */}

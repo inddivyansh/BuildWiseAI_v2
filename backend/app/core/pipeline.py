@@ -203,6 +203,8 @@ class GenerationPipeline:
         run_compliance: bool = True,
         generator: str = "housediffusion",
         zone_id: str | None = None,
+        model: str | None = None,
+        provider: str | None = None,
     ) -> dict:
         """
         Full pipeline: NL prompt → GeneratedFloorPlan.
@@ -217,7 +219,10 @@ class GenerationPipeline:
         # --- Layer 1: LLM Parsing ---
         t0 = time.time()
         try:
-            spec = await self.llm.parse_nl_to_spec(
+            from app.services.llm.providers import validate_model_selection
+            validated_provider, validated_model = validate_model_selection(model, provider)
+            llm_client = LLMClient(provider=validated_provider, model=validated_model)
+            spec = await llm_client.parse_nl_to_spec(
                 prompt, plot_width_m, plot_depth_m, locale
             )
             timing["llm_parse_s"] = round(time.time() - t0, 3)
@@ -226,6 +231,8 @@ class GenerationPipeline:
                 rooms=len(spec.rooms),
                 total_area=spec.total_target_area,
                 generation_id=generation_id,
+                model=validated_model,
+                provider=validated_provider,
             )
         except Exception as e:
             logger.error("llm_parse_failed", error=str(e))

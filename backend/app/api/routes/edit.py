@@ -111,16 +111,20 @@ async def edit_floor_plan(
 
     actions = request.actions
     if not actions and request.prompt:
-        # LLM parsing path
-        from app.core.pipeline import GenerationPipeline
-        pipeline = GenerationPipeline()
+        # LLM parsing path with validated model
+        from app.services.llm.providers import validate_model_selection
+        from app.services.llm.client import LLMClient
         try:
-            parsed_json = await pipeline.llm.parse_edit_command(
+            val_provider, val_model = validate_model_selection(request.model, request.provider)
+            edit_llm = LLMClient(provider=val_provider, model=val_model)
+            parsed_json = await edit_llm.parse_edit_command(
                 prompt=request.prompt,
                 current_spec=existing.spec.model_dump(exclude_none=True),
             )
             raw_actions = parsed_json.get("actions", [])
             actions = [EditAction(**a) for a in raw_actions]
+        except ValueError as val_err:
+            raise HTTPException(status_code=400, detail=str(val_err))
         except Exception as e:
             return EditResponse(
                 generation_id=request.generation_id,

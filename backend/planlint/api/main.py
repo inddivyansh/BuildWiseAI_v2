@@ -104,8 +104,9 @@ def create_app(repo=None, embedder=None) -> FastAPI:
     # The unified app uses PlanLint's Neo4j-backed /projects endpoints as the
     # single source of truth for projects. The ArchiGen in-memory project store
     # is only active when running standalone via app.main:app.
-    from app.api.routes import compliance, edit, export, generate, ingest  # noqa: E402
+    from app.api.routes import compliance, edit, export, generate, ingest, models  # noqa: E402
 
+    app.include_router(models.router, prefix="/api", tags=["models"])
     app.include_router(generate.router, prefix="/api", tags=["generation"])
     app.include_router(edit.router, prefix="/api", tags=["editing"])
     app.include_router(ingest.router, prefix="/api", tags=["ingestion"])

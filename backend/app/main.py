@@ -40,8 +40,9 @@ app.add_middleware(
 )
 
 # --- Routes ---
-from app.api.routes import compliance, edit, export, generate, ingest, projects  # noqa: E402
+from app.api.routes import compliance, edit, export, generate, ingest, models, projects  # noqa: E402
 
+app.include_router(models.router, prefix="/api", tags=["models"])
 app.include_router(generate.router, prefix="/api", tags=["generation"])
 app.include_router(edit.router, prefix="/api", tags=["editing"])
 app.include_router(ingest.router, prefix="/api", tags=["ingestion"])

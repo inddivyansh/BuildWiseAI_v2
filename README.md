@@ -88,7 +88,16 @@ BuildWise v2 is tailored for AEC professionals, municipal regulators, and builde
 * **Conversational & Parametric Editing**: Modify active designs using natural language instructions (*"expand the primary bedroom eastward by 1 meter"* or *"add an en-suite bathroom to bedroom 2"*).
 * **Multi-Format CAD/BIM Exporters**: Native generation of IFC files (via `ifcopenshell`), DXF vector files (via `ezdxf`), architectural PDF sheets with title blocks, and SVG vectors.
 
-### 2. Plan Compliance (Deterministic Code Auditor)
+### 2. Multi-Provider AI Engine (Free-Tier Prioritized)
+* **Free-Tier Model Selector**: First-class support for zero-cost and free-tier LLM providers, accessible directly in the generation dialog and studio controls.
+  * **Google Gemini** (`gemini-2.5-flash`, `gemini-1.5-flash`, `gemini-2.0-flash`): High-speed reasoning with 1M context window via Google AI Studio free tier (up to 15 RPM, 1,500 RPD with zero credit card requirements).
+  * **Groq / Qwen** (`qwen-2.5-32b`, `qwen-2.5-coder-32b`): Ultra-low-latency LPU inference for high-quality open-weights architectural modeling.
+  * **xAI Grok** (`grok-beta`): Accessible under free developer credits and quota allocations.
+  * **Local Ollama** (`ollama:qwen2.5`): 100% offline, private, and local execution with zero API keys and zero cost.
+* **Strict Backend Allowlist & Premium Guardrails**: Commercial and premium models (`GPT-4o`, `Claude 3.5 Sonnet`) are kept intact in the architecture but visibly grouped and labeled **Coming Soon** in the UI, while the backend rejects unallowed models with clear guidance.
+* **Resilient Heuristic Fallback**: Zero silent paid fallbacks. If an external API key is absent or quota-limited, the system falls back to its deterministic procedural spatial packing generator.
+
+### 3. Plan Compliance (Deterministic Code Auditor)
 * **The Zero Guesswork Principle**: **No large language model ever decides a compliance verdict.** LLMs are strictly limited to text/table extraction and query routing. The actual compliance judgment is computed by a deterministic, auditable Python geometry and rules engine.
 * **Schedule Grounding**: Automatically detects and extracts door/window schedules from drawing sheets, resolving nominal door callouts to actual clear openings.
 * **Cross-Sheet Callout Resolution**: Automatically maps detail callouts (e.g., `Detail 3 / Sheet A-501`) across multi-page architectural drawing sets to verify construction assemblies.
@@ -357,11 +366,27 @@ Access points:
 
 ## ⚙️ Environment Configuration
 
-Copy `.env.example` to `.env` in the repository root to configure runtime parameters:
+BuildWise v2 uses a unified environment architecture. Simply copy `.env.example` to `.env` in the repository root:
 
 ```bash
 cp .env.example .env
 ```
+
+> [!TIP]
+> **Single `.env` File**: Both backend services (`planlint` and `app`) and the Next.js frontend automatically read from the root `.env` file. You do not need multiple configuration files.
+
+### 🤖 AI Provider Credentials & Free-Tier Quotas
+
+| Provider | Environment Variable | Tier Status | Free Quota / Limits | How to Obtain |
+|---|---|---|---|---|
+| **Google Gemini** *(Default)* | `GEMINI_API_KEY` or `GOOGLE_API_KEY` | **Free Tier** | **15 RPM / 1,500 RPD / 1M TPM** (Zero billing required) | [Google AI Studio](https://aistudio.google.com/app/apikey) |
+| **Groq / Qwen** | `GROQ_API_KEY` | **Free Tier** | **Generous developer tier** (Qwen 2.5 32B & Coder on LPUs) | [Groq Console](https://console.groq.com/keys) |
+| **xAI Grok** | `XAI_API_KEY` | **Free Quota** | Initial developer credits & free tier allocation | [xAI Console](https://console.x.ai) |
+| **Ollama (Local)** | `OLLAMA_BASE_URL` | **Local (Free)** | **100% Free & Unlimited** (Runs offline on your machine) | [Ollama.com](https://ollama.com) (`ollama run qwen2.5`) |
+| **OpenAI** | `OPENAI_API_KEY` | *Coming Soon* | Preserved in config; unselectable in current release | [OpenAI Platform](https://platform.openai.com) |
+| **Anthropic** | `ANTHROPIC_API_KEY` | *Coming Soon* | Preserved in config; unselectable in current release | [Anthropic Console](https://console.anthropic.com) |
+
+### 🛠️ Core Infrastructure & Database Variables
 
 | Variable | Default Value | Description |
 |---|---|---|
@@ -374,24 +399,23 @@ cp .env.example .env
 | `AUTH_REQUIRED` | `true` (prod) / `false` (dev) | Enable Supabase JWT authentication guard |
 | `SUPABASE_URL` | *(optional)* | Supabase project URL |
 | `SUPABASE_JWT_SECRET`| *(optional)* | Supabase JWT signing secret for bearer verification |
-| `GEMINI_API_KEY` | *(optional)* | Google Gemini API key for structured spec generation |
-| `OPENAI_API_KEY` | *(optional)* | OpenAI API key for vision/text analysis |
 | `PLANLINT_OFFLINE_SAMPLE` | `0` (or `1` for offline) | Enable deterministic regex extraction without API keys |
 | `NEXT_PUBLIC_API_URL` | `http://localhost:8000` | Frontend backend target URL |
 
 > [!NOTE]
-> When external LLM keys are omitted, BuildWise v2 automatically operates using its built-in deterministic heuristic generator and offline extraction rules, allowing full testing of the 2D/3D studio and compliance verification with zero API cost.
+> When external LLM keys are omitted or quota-exhausted, BuildWise v2 automatically operates using its built-in deterministic heuristic generator and offline extraction rules, allowing full testing of the 2D/3D studio and compliance verification with zero API cost.
 
 ---
 
 ## 📡 API Reference & Route Catalog
 
-### 🎨 Blueprint Studio & CAD Exporters
+### 🎨 Blueprint Studio & AI Model Selection
 | Method | Route | Description |
 |---|---|---|
-| `POST` | `/api/generate` | Generate floor plan geometry from a natural language prompt |
+| `GET`  | `/api/models` | List all available AI models, active provider configuration statuses, and the free-tier allowlist |
+| `POST` | `/api/generate` | Generate floor plan geometry from a prompt (`prompt`, optional `model`, `provider`) |
 | `POST` | `/api/generate/from-spec` | Generate geometry from a structured `FloorPlanSpec` |
-| `POST` | `/api/edit` | Apply natural language or parametric layout modifications |
+| `POST` | `/api/edit` | Apply natural language layout modifications (`prompt`, `generation_id`, optional `model`) |
 | `POST` | `/api/ingest` | Upload raster/PDF/CAD drawing to vectorize geometry |
 | `GET`  | `/api/export/formats` | List supported export formats (`svg`, `dxf`) |
 | `GET`  | `/api/export/{id}/{fmt}` | Download plan in target format (SVG or DXF) |

@@ -1,6 +1,19 @@
-"""Application settings via environment variables."""
+from pathlib import Path
+from dotenv import load_dotenv
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from pydantic_settings import BaseSettings
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_BACKEND_ROOT = Path(__file__).resolve().parents[1]
+
+# Load env files into process environment in order of priority:
+# 1. repo root .env
+# 2. repo root .env.local
+# 3. backend/.env
+# 4. backend/.env.local
+load_dotenv(_REPO_ROOT / ".env")
+load_dotenv(_REPO_ROOT / ".env.local")
+load_dotenv(_BACKEND_ROOT / ".env")
+load_dotenv(_BACKEND_ROOT / ".env.local")
 
 
 class Settings(BaseSettings):
@@ -15,13 +28,20 @@ class Settings(BaseSettings):
     supabase_jwt_secret: str = ""
     auth_required: bool = True
 
-    # LLM
-    llm_provider: str = "gemini"  # "ollama", "sglang", or "gemini"
-    ollama_base_url: str = "http://localhost:11434"
-    sglang_base_url: str = "http://localhost:30000"
+    # LLM & AI Providers
+    llm_provider: str = "gemini"  # "gemini", "groq", "xai", "ollama", "sglang"
+    llm_model: str = "gemini-3.5-flash"
     gemini_base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai"
     gemini_api_key: str = ""
-    llm_model: str = "gemini-3.1-flash-lite-preview"
+    google_api_key: str = ""  # Alias for GEMINI_API_KEY
+    groq_base_url: str = "https://api.groq.com/openai/v1"
+    groq_api_key: str = ""
+    xai_base_url: str = "https://api.x.ai/v1"
+    xai_api_key: str = ""
+    ollama_base_url: str = "http://localhost:11434"
+    sglang_base_url: str = "http://localhost:30000"
+    openai_api_key: str = ""
+    anthropic_api_key: str = ""
 
     # Neo4j
     neo4j_uri: str = "bolt://localhost:7687"
@@ -73,7 +93,18 @@ class Settings(BaseSettings):
     min_room_area_sqm: float = 2.0
     max_upload_size_mb: int = 50
 
-    model_config = {"env_file": ".env.local", "env_file_encoding": "utf-8"}
+    model_config = SettingsConfigDict(
+        env_file=(
+            str(_REPO_ROOT / ".env"),
+            str(_REPO_ROOT / ".env.local"),
+            str(_BACKEND_ROOT / ".env"),
+            str(_BACKEND_ROOT / ".env.local"),
+            ".env",
+            ".env.local",
+        ),
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
 
 settings = Settings()

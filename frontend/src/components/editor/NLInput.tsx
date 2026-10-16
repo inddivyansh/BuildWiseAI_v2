@@ -8,12 +8,15 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { useFloorPlanStore } from "@/stores/floorPlanStore";
 import { useGenerateAction, useEditAction, useComplianceCheck } from "@/hooks/useFloorPlanActions";
+import { useModelStore } from "@/stores/modelStore";
+import { ModelSelector } from "@/components/editor/ModelSelector";
 import { api } from "@/lib/api";
 
 export function NLInput({ projectId }: { projectId?: string } = {}) {
   const router = useRouter();
   const [text, setText] = useState("");
   const { currentPlan, isGenerating } = useFloorPlanStore();
+  const { selectedModelId, getSelectedModel } = useModelStore();
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -35,11 +38,15 @@ export function NLInput({ projectId }: { projectId?: string } = {}) {
     const trimmed = text.trim();
     if (!trimmed || isPending) return;
 
+    const activeModel = getSelectedModel();
+
     if (isEdit) {
       editAction.mutate(
         {
           generation_id: currentPlan!.generation_id,
           prompt: trimmed,
+          model: selectedModelId,
+          provider: activeModel?.provider,
         },
         {
           onSuccess: () => {
@@ -65,7 +72,12 @@ export function NLInput({ projectId }: { projectId?: string } = {}) {
       }
 
       generateAction.mutate(
-        { prompt: trimmed, project_id: targetProjectId },
+        {
+          prompt: trimmed,
+          project_id: targetProjectId,
+          model: selectedModelId,
+          provider: activeModel?.provider,
+        },
         {
           onSuccess: (data) => {
             setText("");
@@ -77,7 +89,7 @@ export function NLInput({ projectId }: { projectId?: string } = {}) {
         },
       );
     }
-  }, [text, isPending, isEdit, currentPlan, editAction, generateAction, complianceCheck, projectId, router]);
+  }, [text, isPending, isEdit, currentPlan, editAction, generateAction, complianceCheck, projectId, router, selectedModelId, getSelectedModel]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
@@ -105,6 +117,8 @@ export function NLInput({ projectId }: { projectId?: string } = {}) {
         >
           {isEdit ? "Edit" : "Generate"}
         </Badge>
+
+        <ModelSelector compact />
 
         <input
           type="text"

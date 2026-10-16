@@ -30,6 +30,9 @@ class GenerateRequest(BaseModel):
     zone_id: str | None = Field(None, description="Municipal zone ID, e.g. '31001Ma'")
     run_compliance: bool = True
     generator: str = "housediffusion"  # housediffusion, gsdiff, constraint_solver
+    # Free-tier AI model selection (e.g. 'gemini-2.5-flash', 'qwen-2.5-32b', 'grok-beta', 'ollama:qwen2.5')
+    model: str | None = Field(None, description="Requested AI model identifier")
+    provider: str | None = Field(None, description="Requested AI provider (e.g. 'gemini', 'groq', 'xai', 'ollama')")
     # When provided the generated blueprint is durably persisted under this project
     # in the Neo4j graph and survives restarts.  The project must already exist.
     # If omitted the result is stored in the in-process plan_store only (session-scoped).
@@ -81,6 +84,8 @@ class EditRequest(BaseModel):
     )
     # Alternative: structured edit commands (from drag-and-drop UI)
     actions: list[EditAction] | None = None
+    model: str | None = Field(None, description="Requested AI model identifier for NL edit parsing")
+    provider: str | None = Field(None, description="Requested AI provider for NL edit parsing")
     # Optional: spatial mask from canvas selection
     edit_region: dict | None = Field(
         None,

@@ -33,30 +33,87 @@ class LLMClient:
         provider: str | None = None,
         base_url: str | None = None,
         model: str | None = None,
+        api_key: str | None = None,
     ):
-        self.provider = provider or settings.llm_provider
+        import os
+
+        self.provider = (provider or settings.llm_provider).lower()
         self.model = model or settings.llm_model
+
+        # Map older or decommissioned model names to active working provider endpoints
+        MODEL_UPGRADE_MAP = {
+            "gemini-2.5-flash": "gemini-3.5-flash",
+            "gemini-1.5-flash": "gemini-3.5-flash",
+            "gemini-2.0-flash": "gemini-3.5-flash",
+            "qwen-2.5-32b": "qwen/qwen3.8-27b",
+            "qwen-2.5-coder-32b": "qwen/qwen3.8-27b",
+        }
+        effective_model = MODEL_UPGRADE_MAP.get(self.model, self.model)
+
+        # Extract pure model name for endpoint (e.g. "ollama:qwen2.5" -> "qwen2.5")
+        if effective_model.startswith("ollama:"):
+            self.model_call_name = effective_model.split(":", 1)[1]
+        else:
+            self.model_call_name = effective_model
 
         if base_url:
             api_base = base_url
-            api_key = "not-needed"
+            resolved_key = api_key or "not-needed"
         elif self.provider == "gemini":
             api_base = settings.gemini_base_url
-            api_key = settings.gemini_api_key or "not-needed"
+            resolved_key = (
+                api_key
+                or settings.gemini_api_key
+                or os.environ.get("GEMINI_API_KEY")
+                or os.environ.get("GOOGLE_API_KEY")
+                or "not-needed"
+            )
+        elif self.provider == "groq":
+            api_base = getattr(settings, "groq_base_url", "https://api.groq.com/openai/v1")
+            resolved_key = (
+                api_key
+                or getattr(settings, "groq_api_key", "")
+                or os.environ.get("GROQ_API_KEY")
+                or "not-needed"
+            )
+        elif self.provider == "xai":
+            api_base = getattr(settings, "xai_base_url", "https://api.x.ai/v1")
+            resolved_key = (
+                api_key
+                or getattr(settings, "xai_api_key", "")
+                or os.environ.get("XAI_API_KEY")
+                or "not-needed"
+            )
         elif self.provider == "ollama":
             api_base = f"{settings.ollama_base_url}/v1"
-            api_key = "not-needed"
+            resolved_key = "ollama"
         elif self.provider == "sglang":
             api_base = f"{settings.sglang_base_url}/v1"
-            api_key = "not-needed"
+            resolved_key = "sglang"
+        elif self.provider == "openai":
+            api_base = "https://api.openai.com/v1"
+            resolved_key = (
+                api_key
+                or getattr(settings, "openai_api_key", "")
+                or os.environ.get("OPENAI_API_KEY")
+                or "not-needed"
+            )
+        elif self.provider == "anthropic":
+            api_base = "https://api.anthropic.com/v1"
+            resolved_key = (
+                api_key
+                or getattr(settings, "anthropic_api_key", "")
+                or os.environ.get("ANTHROPIC_API_KEY")
+                or "not-needed"
+            )
         else:
             api_base = f"{settings.ollama_base_url}/v1"
-            api_key = "not-needed"
+            resolved_key = "not-needed"
 
         self.base_url = api_base
         self._client = AsyncOpenAI(
             base_url=api_base,
-            api_key=api_key,
+            api_key=resolved_key,
         )
 
         logger.info(
@@ -154,8 +211,9 @@ class LLMClient:
             {"role": "user", "content": user_message},
         ]
 
+        target_model = getattr(self, "model_call_name", self.model)
         kwargs: dict = {
-            "model": self.model,
+            "model": target_model,
             "messages": messages,
             "temperature": 0.3,
             "max_tokens": 4096,
@@ -175,15 +233,36 @@ class LLMClient:
             # Ollama supports format parameter for JSON output
             kwargs["extra_body"] = {"format": "json"}
             kwargs["response_format"] = {"type": "json_object"}
-        elif self.provider == "gemini":
-            # Gemini OpenAI-compatible endpoint supports json_object
+        elif self.provider in ("gemini", "groq", "xai", "openai"):
+            # OpenAI-compatible endpoints with json_object mode
             kwargs["response_format"] = {"type": "json_object"}
         else:
             kwargs["response_format"] = {"type": "json_object"}
 
-        logger.debug("llm_request", provider=self.provider, model=self.model)
+        logger.debug("llm_request", provider=self.provider, model=target_model)
 
-        response = await self._client.chat.completions.create(**kwargs)
+        try:
+            response = await self._client.chat.completions.create(**kwargs)
+        except Exception as exc:
+            err_str = str(exc)
+            logger.error("llm_call_failed", provider=self.provider, model=target_model, error=err_str)
+            if "429" in err_str or "rate limit" in err_str.lower() or "quota" in err_str.lower():
+                raise RuntimeError(
+                    f"Free-tier rate limit or quota exceeded for {self.provider} ({target_model}). "
+                    "Please wait a moment before trying again, or select another free-tier model."
+                ) from exc
+            if "401" in err_str or "auth" in err_str.lower() or "api key" in err_str.lower():
+                raise RuntimeError(
+                    f"Authentication failed for {self.provider}. Please verify that the API key is configured correctly."
+                ) from exc
+            if "timeout" in err_str.lower() or "connection" in err_str.lower():
+                raise RuntimeError(
+                    f"Connection to {self.provider} timed out. Please check your network connection or try another model."
+                ) from exc
+            raise RuntimeError(
+                f"AI model inference failed on {self.provider} ({target_model}): {err_str[:200]}"
+            ) from exc
+
         content = response.choices[0].message.content
 
         logger.debug(
@@ -554,31 +633,30 @@ class LLMClient:
 
     async def health_check(self) -> bool:
         """Check if the LLM server is reachable and the model is available."""
+        target_model = getattr(self, "model_call_name", self.model)
         try:
-            if self.provider == "gemini":
-                # Gemini: just test a tiny completion to verify key + model work
+            if self.provider in ("gemini", "groq", "xai"):
+                # Test minimal completion to verify API key and endpoint validity
                 response = await self._client.chat.completions.create(
-                    model=self.model,
+                    model=target_model,
                     messages=[{"role": "user", "content": "hi"}],
                     max_tokens=5,
                 )
                 return response.choices[0].message.content is not None
 
             models = await self._client.models.list()
-            # Check that our target model is actually available
             model_ids = [m.id for m in models.data]
-            if self.model in model_ids:
+            if target_model in model_ids or self.model in model_ids:
                 return True
-            # Ollama may report model names without tags
-            base_name = self.model.split(":")[0]
+            base_name = target_model.split(":")[0]
             if any(base_name in mid for mid in model_ids):
                 return True
             logger.warning(
                 "llm_model_not_found",
-                model=self.model,
+                model=target_model,
                 available=model_ids[:10],
             )
             return False
         except Exception as e:
-            logger.warning("llm_health_check_failed", error=str(e))
+            logger.warning("llm_health_check_failed", provider=self.provider, model=target_model, error=str(e))
             return False

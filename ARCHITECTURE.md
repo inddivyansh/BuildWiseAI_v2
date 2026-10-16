@@ -367,9 +367,13 @@ The frontend is built with Next.js 14 utilizing the App Router architecture, Typ
 ### State Management Stores (`frontend/src/stores/`)
 - `floorPlanStore.ts`: Primary reactive store for Blueprint Studio holding the active `GeneratedFloorPlan` model (walls, rooms, doors, windows, plot dimensions), active tool (`select`, `wall`, `room`, `door`, `window`), zoom scale, and undo/redo stacks.
 - `editorStore.ts`: Manages UI state, active viewport mode (`2D` vector vs `3D` BIM walkthrough), selected asset IDs, grid snapping parameters, and dialog visibility.
+- `modelStore.ts`: Persistent store backed by `localStorage` tracking the active AI provider (`gemini`, `groq`, `xai`, `ollama`) and model selection (`gemini-2.5-flash`, `qwen-2.5-32b`, etc.) across generation dialogs, canvas overlays, and editor sessions.
 - `AuthContext.tsx`: React context managing the active authenticated session, user profile, and automatic Bearer token injection for HTTP requests.
 
 ### Key Visual Components
+- `ModelSelector.tsx` (`src/components/editor/`): Dual-group model picker featuring:
+  - **Free-Tier Models**: Live indicators showing provider configuration status (`Configured` vs `Key Required`), free tier quotas, and capability tags.
+  - **Premium Models (Coming Soon)**: Disabled, non-selectable OpenAI and Anthropic models clearly labeled for future enterprise releases.
 - `FloorPlanCanvas.tsx` (`src/components/canvas/`): HTML5 Canvas vector renderer powered by Konva. Handles real-time drag-and-drop spatial manipulation, bounding-box handles, alignment snapping, and dimension arrows.
 - `ThreeViewer.tsx` (`src/components/viewer/`): WebGL 3D modeler using Three.js and React Three Fiber. Generates volumetric polygon extrusions for exterior/interior walls with cutouts for door openings and translucent window panes.
 - `PlanViewer.tsx` (`src/components/`): Vector architectural drawing inspector powered by PDF.js with SVG overlays. Renders color-coded bounding boxes over audited physical assets (green = pass, red = violation, amber = review required).
@@ -403,15 +407,17 @@ def create_app(repo=None, embedder=None) -> FastAPI:
    - `GET /projects/{id}/blueprints`: List all durable blueprints saved to a project.
    - `GET /projects/{id}/blueprints/{bp_id}`: Fetch full CAD model of a saved blueprint.
    - `DELETE /projects/{id}/blueprints/{bp_id}`: Remove a blueprint from project history.
-3. **Blueprint Studio Generation (`app/api/routes/generate.py`)**:
-   - `POST /api/generate`: Generate complete floor plan from a text prompt.
+3. **AI Models & Provider Catalog (`app/api/routes/models.py`)**:
+   - `GET /api/models`: Return available model catalog, active configuration status per provider, free-tier allowlist, and default model ID.
+4. **Blueprint Studio Generation (`app/api/routes/generate.py`)**:
+   - `POST /api/generate`: Generate complete floor plan from text prompt (`prompt`, optional `model`, `provider`).
    - `POST /api/generate/from-spec`: Generate floor plan from structured `FloorPlanSpec`.
-4. **Blueprint Studio Editing (`app/api/routes/edit.py`)**:
-   - `POST /api/edit`: Apply parametric or natural language edits to an active plan.
-5. **CAD/BIM Exports (`app/api/routes/export.py`)**:
+5. **Blueprint Studio Editing (`app/api/routes/edit.py`)**:
+   - `POST /api/edit`: Apply parametric or natural language edits to an active plan (`prompt`, `generation_id`, optional `model`).
+6. **CAD/BIM Exports (`app/api/routes/export.py`)**:
    - `GET /api/export/formats`: List supported export formats (`svg`, `dxf`).
    - `GET /api/export/{id}/{fmt}`: Stream requested CAD file.
-6. **Zoning Engine (`app/api/routes/compliance.py`)**:
+7. **Zoning Engine (`app/api/routes/compliance.py`)**:
    - `GET /api/compliance/zones`: List available municipal zoning presets.
    - `POST /api/compliance/check`: Perform design-time setback and lot coverage checks.
 
@@ -421,17 +427,23 @@ def create_app(repo=None, embedder=None) -> FastAPI:
 
 Blueprint Studio transforms natural language or structured specifications into production-grade CAD geometry:
 
-1. **Prompt to Program Synthesis (`app/services/llm/client.py`)**:
+1. **Multi-Provider AI Architecture (`app/services/llm/`)**:
+   - `providers.py`: Central model catalog, capability registry, and strict allowlist enforcement:
+     - **Free-Tier Allowlist (`FREE_TIER_ALLOWLIST`)**: Only verified free-tier models (`gemini-2.5-flash`, `gemini-1.5-flash`, `qwen-2.5-32b`, `grok-beta`, `ollama:qwen2.5`) can be invoked.
+     - **Premium Guardrails (`PREMIUM_MODEL_IDS`)**: Requests requesting commercial models (`gpt-4o`, `claude-3-5-sonnet`) are safely intercepted and rejected with a descriptive `Coming Soon` error.
+     - **Provider Introspection (`is_provider_configured`)**: Inspects runtime environment without exposing sensitive tokens to browser clients.
+   - `client.py`: Multi-provider LLM client implementing OpenAI-compatible schema dispatching to Google Gemini, Groq, xAI, or local Ollama endpoints. Includes sanitized exception handling that strips API keys from logs and client-facing error payloads.
+2. **Prompt to Program Synthesis**:
    - Uses Pydantic AI with typed schemas (`FloorPlanSpec`) to parse room types, quantities, minimum dimensions, and adjacency constraints.
-2. **Generative Model Dispatcher (`app/services/generation/dispatcher.py`)**:
+3. **Generative Model Dispatcher (`app/services/generation/dispatcher.py`)**:
    - *Remote GPU*: Dispatches to Modal Labs serverless GPU running HouseDiffusion or GS-Diff checkpoints when configured.
    - *Local GPU/CPU*: Loads PyTorch weights if available locally.
-   - *Heuristic Fallback Engine (`mock.py`)*: When no ML checkpoints or API keys are present, a deterministic spatial packing heuristic generates fully compliant, vector-accurate layouts with living/dining rooms, primary bedrooms, kitchens, and ADA-compliant restrooms.
-3. **Computational Geometry Normalization (`app/services/geometry/`)**:
+   - *Heuristic Fallback Engine (`mock.py`)*: When no ML checkpoints or API keys are present, a deterministic spatial packing heuristic generates fully compliant, vector-accurate layouts with living/dining rooms, primary bedrooms, kitchens, and ADA-compliant restrooms. Zero silent fallbacks to paid APIs.
+4. **Computational Geometry Normalization (`app/services/geometry/`)**:
    - `operations.py`: Uses Shapely 2.0 to perform polygon intersection, clipping, and coordinate rounding.
    - `adjacency.py`: Analyzes shared wall boundaries to position interior doors and passage openings.
    - `cleanup.py`: Uses PyClipper to resolve self-intersecting polygons and eliminate micro-gaps.
-4. **CAD/BIM File Exporters (`app/services/export/`)**:
+5. **CAD/BIM File Exporters (`app/services/export/`)**:
    - `ifc_builder.py`: Constructs native `IfcProject`, `IfcSite`, `IfcBuilding`, `IfcBuildingStorey`, `IfcWallStandardCase`, `IfcDoor`, and `IfcWindow` entities via `ifcopenshell`.
    - `dxf_exporter.py`: Generates standardized AutoCAD DXF drawings with dedicated layers for walls, door swing arcs, window openings, and dimension strings via `ezdxf`.
 

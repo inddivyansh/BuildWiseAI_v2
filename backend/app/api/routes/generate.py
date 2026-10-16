@@ -62,11 +62,23 @@ async def generate_floor_plan(
     compliance: ComplianceResult | None = None
     floor_plan: GeneratedFloorPlan | None = None
 
-    # Check if LLM is available
-    llm_ok = await pipeline.llm.health_check()
+    # Validate requested model if provided (rejects unknown or premium models)
+    from app.services.llm.providers import validate_model_selection
+    from fastapi import HTTPException
+    try:
+        validated_provider, validated_model = validate_model_selection(
+            request_body.model, request_body.provider
+        )
+    except ValueError as val_err:
+        raise HTTPException(status_code=400, detail=str(val_err))
+
+    # Initialize client for health check
+    from app.services.llm.client import LLMClient
+    active_llm = LLMClient(provider=validated_provider, model=validated_model)
+    llm_ok = await active_llm.health_check()
 
     if llm_ok:
-        # Full pipeline with LLM
+        # Full pipeline with validated LLM
         result = await pipeline.generate_from_nl(
             prompt=request_body.prompt,
             plot_width_m=request_body.plot_width_m,
@@ -75,6 +87,8 @@ async def generate_floor_plan(
             run_compliance=request_body.run_compliance,
             generator=request_body.generator,
             zone_id=request_body.zone_id,
+            model=validated_model,
+            provider=validated_provider,
         )
         if result.get("floor_plan"):
             floor_plan = result["floor_plan"]

@@ -139,6 +139,8 @@ export interface GenerateRequest {
   zone_id?: string;
   run_compliance?: boolean;
   generator?: string;
+  model?: string;
+  provider?: string;
 }
 
 export interface GenerateResponse {
@@ -154,6 +156,8 @@ export interface GenerateResponse {
 export interface EditRequest {
   generation_id: string;
   prompt?: string;
+  model?: string;
+  provider?: string;
   actions?: Array<{
     action: string;
     target_room_id?: string;
