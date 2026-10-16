@@ -1,0 +1,313 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 480" width="100%" height="100%">
+  <defs>
+    <!-- Background Gradients -->
+    <linearGradient id="bg-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#070c18" />
+      <stop offset="50%" stop-color="#0b172a" />
+      <stop offset="100%" stop-color="#0e2338" />
+    </linearGradient>
+
+    <linearGradient id="cyan-glow" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#38bdf8" />
+      <stop offset="50%" stop-color="#00f5d4" />
+      <stop offset="100%" stop-color="#38bdf8" />
+    </linearGradient>
+
+    <linearGradient id="amber-glow" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#f59e0b" />
+      <stop offset="100%" stop-color="#fbbf24" />
+    </linearGradient>
+
+    <!-- Blueprint Grid Patterns -->
+    <pattern id="smallGrid" width="20" height="20" patternUnits="userSpaceOnUse">
+      <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#1e3a5f" stroke-width="0.5" stroke-opacity="0.35" />
+    </pattern>
+    <pattern id="grid" width="100" height="100" patternUnits="userSpaceOnUse">
+      <rect width="100" height="100" fill="url(#smallGrid)" />
+      <path d="M 100 0 L 0 0 0 100" fill="none" stroke="#38bdf8" stroke-width="0.8" stroke-opacity="0.2" />
+    </pattern>
+
+    <!-- Drop Shadows and Filters -->
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+    <filter id="softGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="1.5" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+
+    <style>
+      .blueprint-line { stroke: #38bdf8; stroke-linecap: round; stroke-linejoin: round; }
+      .wall-thick { stroke: #e2e8f0; stroke-width: 3.5; }
+      .wall-inner { stroke: #94a3b8; stroke-width: 2; }
+      .door-arc { stroke: #00f5d4; stroke-width: 1.5; stroke-dasharray: 4,3; fill: none; }
+      .dimension-line { stroke: #38bdf8; stroke-width: 1; stroke-dasharray: 6,4; }
+      .zoning-line { stroke: #f59e0b; stroke-width: 1.5; stroke-dasharray: 8,4; }
+      
+      .animated-flow {
+        stroke-dasharray: 8, 6;
+        animation: flowDash 20s linear infinite;
+      }
+      .pulse-node {
+        animation: nodePulse 3s ease-in-out infinite;
+      }
+      .pulse-verdict {
+        animation: verdictPulse 2.5s ease-in-out infinite;
+      }
+      .radar-sweep {
+        transform-origin: 340px 240px;
+        animation: radarSpin 8s linear infinite;
+      }
+
+      @keyframes flowDash {
+        from { stroke-dashoffset: 280; }
+        to { stroke-dashoffset: 0; }
+      }
+      @keyframes nodePulse {
+        0%, 100% { r: 5; opacity: 0.8; }
+        50% { r: 7.5; opacity: 1; filter: drop-shadow(0 0 6px #00f5d4); }
+      }
+      @keyframes verdictPulse {
+        0%, 100% { opacity: 0.9; transform: scale(1); }
+        50% { opacity: 1; transform: scale(1.02); }
+      }
+      @keyframes radarSpin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .animated-flow, .pulse-node, .pulse-verdict, .radar-sweep {
+          animation: none !important;
+        }
+      }
+    </style>
+  </defs>
+
+  <!-- Background Layer -->
+  <rect width="1200" height="480" fill="url(#bg-grad)" />
+  <rect width="1200" height="480" fill="url(#grid)" />
+
+  <!-- Outer Architectural Framing & Coordinates -->
+  <rect x="25" y="25" width="1150" height="430" fill="none" stroke="#1e3a5f" stroke-width="1.5" />
+  <rect x="30" y="30" width="1140" height="420" fill="none" stroke="#38bdf8" stroke-width="0.75" stroke-opacity="0.4" />
+  
+  <!-- Coordinate Rulers -->
+  <g font-family="ui-monospace, monospace" font-size="9" fill="#64748b" text-anchor="middle">
+    <text x="150" y="20">01</text><text x="300" y="20">02</text><text x="450" y="20">03</text>
+    <text x="600" y="20">04</text><text x="750" y="20">05</text><text x="900" y="20">06</text><text x="1050" y="20">07</text>
+    <text x="15" y="100">A</text><text x="15" y="200">B</text><text x="15" y="300">C</text><text x="15" y="400">D</text>
+  </g>
+
+  <!-- ========================================================================= -->
+  <!-- LEFT PANEL: LIVING BLUEPRINT FLOOR PLAN GEOMETRY (Interactive Drafting)  -->
+  <!-- ========================================================================= -->
+  <g transform="translate(60, 65)">
+    <!-- Setback / Zoning Boundary (Amber dashed) -->
+    <rect x="0" y="0" width="460" height="340" fill="none" class="zoning-line" />
+    <text x="10" y="-8" font-family="ui-monospace, monospace" font-size="10" fill="#f59e0b" letter-spacing="1">
+      MUNICIPAL ZONING ENVELOPE • FRONT/REAR SETBACK: 4.5m • SIDE: 2.0m
+    </text>
+
+    <!-- Building Footprint Exterior Walls (Concrete double-wall) -->
+    <rect x="30" y="30" width="400" height="280" fill="#0f172a" fill-opacity="0.7" class="wall-thick" />
+    <rect x="34" y="34" width="392" height="272" fill="none" stroke="#38bdf8" stroke-width="1" stroke-opacity="0.5" />
+
+    <!-- Interior Room Partitions -->
+    <!-- Room 1: Living & Dining (Left) -->
+    <line x1="220" y1="34" x2="220" y2="306" class="wall-inner" />
+    <!-- Room 2: Kitchen & Utility (Bottom Right) -->
+    <line x1="220" y1="180" x2="426" y2="180" class="wall-inner" />
+    <!-- Room 3: Restroom / ADA Core -->
+    <rect x="220" y="180" width="95" height="126" fill="#0b172a" fill-opacity="0.5" class="wall-inner" />
+
+    <!-- Room Labels & Area Annotations -->
+    <g font-family="system-ui, -apple-system, sans-serif" font-size="11" font-weight="600" fill="#cbd5e1" text-anchor="middle">
+      <text x="125" y="160">LIVING / DINING</text>
+      <text x="125" y="176" font-size="9" font-family="ui-monospace, monospace" fill="#64748b">32.4 m² • CLEAR 2.80m</text>
+
+      <text x="323" y="105">PRIMARY SUITE</text>
+      <text x="323" y="121" font-size="9" font-family="ui-monospace, monospace" fill="#64748b">18.6 m² • RESIDENTIAL</text>
+
+      <text x="370" y="240">KITCHEN</text>
+      <text x="370" y="254" font-size="9" font-family="ui-monospace, monospace" fill="#64748b">11.2 m²</text>
+
+      <text x="267" y="240" fill="#38bdf8">ADA WC</text>
+      <text x="267" y="254" font-size="8" font-family="ui-monospace, monospace" fill="#94a3b8">60" TURNING</text>
+    </g>
+
+    <!-- ADA 60" Wheelchair Turning Clearance Circle in Restroom -->
+    <circle cx="267" cy="272" r="24" fill="none" stroke="#00f5d4" stroke-width="1" stroke-dasharray="3,3" opacity="0.7" />
+    <path d="M 267 248 L 267 296 M 243 272 L 291 272" stroke="#00f5d4" stroke-width="0.75" opacity="0.4" />
+
+    <!-- Doors & Swings -->
+    <!-- Door 1: Entrance Door with Swing -->
+    <line x1="30" y1="130" x2="30" y2="170" stroke="#070c18" stroke-width="6" /> <!-- wall opening -->
+    <line x1="30" y1="130" x2="58" y2="158" stroke="#38bdf8" stroke-width="2" /> <!-- door leaf -->
+    <path d="M 30 170 A 40 40 0 0 1 58 158" class="door-arc" />
+
+    <!-- Door 2: Primary Suite Door -->
+    <line x1="220" y1="80" x2="220" y2="115" stroke="#070c18" stroke-width="5" />
+    <line x1="220" y1="80" x2="245" y2="105" stroke="#38bdf8" stroke-width="1.75" />
+    <path d="M 220 115 A 35 35 0 0 1 245 105" class="door-arc" />
+
+    <!-- Door 3: ADA Restroom Door (Audited Asset) -->
+    <line x1="220" y1="200" x2="220" y2="238" stroke="#070c18" stroke-width="5" />
+    <line x1="220" y1="200" x2="248" y2="228" stroke="#00f5d4" stroke-width="2.2" />
+    <path d="M 220 238 A 38 38 0 0 1 248 228" class="door-arc" stroke="#00f5d4" stroke-width="2" />
+
+    <!-- Windows (Triple-line architectural symbol) -->
+    <!-- Window 1: Living East -->
+    <rect x="28" y="60" width="4" height="50" fill="#38bdf8" />
+    <line x1="26" y1="60" x2="26" y2="110" stroke="#38bdf8" stroke-width="1" />
+    <line x1="34" y1="60" x2="34" y2="110" stroke="#38bdf8" stroke-width="1" />
+
+    <!-- Window 2: Primary Suite North -->
+    <rect x="290" y="28" width="60" height="4" fill="#38bdf8" />
+    <line x1="290" y1="26" x2="350" y2="26" stroke="#38bdf8" stroke-width="1" />
+    <line x1="290" y1="34" x2="350" y2="34" stroke="#38bdf8" stroke-width="1" />
+
+    <!-- Dimension Guides & Annotation Callouts -->
+    <g stroke="#38bdf8" stroke-width="0.8" opacity="0.85">
+      <!-- Width Dimension (Top) -->
+      <line x1="30" y1="14" x2="430" y2="14" class="dimension-line" />
+      <line x1="30" y1="8" x2="30" y2="20" />
+      <line x1="430" y1="8" x2="430" y2="20" />
+      <text x="230" y="11" font-family="ui-monospace, monospace" font-size="10" fill="#38bdf8" text-anchor="middle" font-weight="600">12.00 m (BUILDING WIDTH)</text>
+
+      <!-- Height Dimension (Right) -->
+      <line x1="446" y1="30" x2="446" y2="310" class="dimension-line" />
+      <line x1="440" y1="30" x2="452" y2="30" />
+      <line x1="440" y1="310" x2="452" y2="310" />
+      <text x="458" y="175" font-family="ui-monospace, monospace" font-size="10" fill="#38bdf8" text-anchor="middle" transform="rotate(90 458 175)" font-weight="600">8.40 m</text>
+    </g>
+
+    <!-- Visual Compliance Verdict Overlay on ADA Doorway -->
+    <g transform="translate(145, 185)" class="pulse-verdict">
+      <rect x="0" y="0" width="160" height="42" rx="6" fill="#042f2e" stroke="#14b8a6" stroke-width="1.5" filter="url(#softGlow)" />
+      <circle cx="16" cy="21" r="7" fill="#10b981" />
+      <path d="M 12 21 L 15 24 L 20 18" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" />
+      <text x="30" y="18" font-family="system-ui, sans-serif" font-size="10" font-weight="700" fill="#2dd4bf">COMPLIANCE: PASS</text>
+      <text x="30" y="32" font-family="ui-monospace, monospace" font-size="9" fill="#99f6e4">ADA 404.2.3 • 34.2" &gt; 32"</text>
+      <!-- Target pointer to doorway -->
+      <path d="M 75 42 L 75 52 L 85 52" fill="none" stroke="#14b8a6" stroke-width="1.2" stroke-dasharray="2,2" />
+    </g>
+  </g>
+
+  <!-- ========================================================================= -->
+  <!-- RIGHT PANEL: PLATFORM TITLE, VALUE PROP & WORKFLOW ARCHITECTURE           -->
+  <!-- ========================================================================= -->
+  <g transform="translate(560, 65)">
+    <!-- Header Tagline & Brand -->
+    <g>
+      <rect x="0" y="0" width="138" height="24" rx="12" fill="#0369a1" fill-opacity="0.3" stroke="#0ea5e9" stroke-width="1" />
+      <text x="69" y="16" font-family="ui-monospace, monospace" font-size="10" font-weight="700" fill="#38bdf8" text-anchor="middle" letter-spacing="1.5">
+        AEC PLATFORM v2.0
+      </text>
+
+      <text x="0" y="62" font-family="system-ui, -apple-system, sans-serif" font-size="38" font-weight="900" fill="#ffffff" letter-spacing="-0.5">
+        BuildWise <tspan fill="url(#cyan-glow)">v2</tspan>
+      </text>
+      
+      <text x="0" y="90" font-family="system-ui, -apple-system, sans-serif" font-size="15" font-weight="500" fill="#94a3b8">
+        Unified Generative Blueprint Studio &amp; Deterministic Compliance Auditor
+      </text>
+    </g>
+
+    <!-- Key AEC Feature Pillars -->
+    <g transform="translate(0, 115)">
+      <!-- Card 1: Blueprint Studio -->
+      <g transform="translate(0, 0)">
+        <rect x="0" y="0" width="280" height="74" rx="8" fill="#0f172a" stroke="#1e3a5f" stroke-width="1" />
+        <rect x="0" y="0" width="4" height="74" rx="2" fill="#38bdf8" />
+        <circle cx="28" cy="28" r="14" fill="#0284c7" fill-opacity="0.25" />
+        <path d="M 23 28 L 33 28 M 28 23 L 28 33" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" />
+        <text x="50" y="27" font-family="system-ui, sans-serif" font-size="13" font-weight="700" fill="#f8fafc">Blueprint Studio</text>
+        <text x="50" y="44" font-family="system-ui, sans-serif" font-size="10.5" fill="#94a3b8">Natural language to vector CAD plans,</text>
+        <text x="50" y="58" font-family="system-ui, sans-serif" font-size="10.5" fill="#94a3b8">2D Konva &amp; 3D Three.js BIM drafting.</text>
+      </g>
+
+      <!-- Card 2: Plan Compliance -->
+      <g transform="translate(295, 0)">
+        <rect x="0" y="0" width="280" height="74" rx="8" fill="#0f172a" stroke="#1e3a5f" stroke-width="1" />
+        <rect x="0" y="0" width="4" height="74" rx="2" fill="#10b981" />
+        <circle cx="28" cy="28" r="14" fill="#059669" fill-opacity="0.25" />
+        <path d="M 22 28 L 26 32 L 34 23" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" />
+        <text x="50" y="27" font-family="system-ui, sans-serif" font-size="13" font-weight="700" fill="#f8fafc">Plan Compliance</text>
+        <text x="50" y="44" font-family="system-ui, sans-serif" font-size="10.5" fill="#94a3b8">Zero guesswork. Deterministic Python rules,</text>
+        <text x="50" y="58" font-family="system-ui, sans-serif" font-size="10.5" fill="#94a3b8">schedule grounding &amp; Neo4j audit graph.</text>
+      </g>
+    </g>
+
+    <!-- Interactive Pipeline Steps (Connected Rail) -->
+    <g transform="translate(0, 210)">
+      <text x="0" y="0" font-family="ui-monospace, monospace" font-size="10.5" font-weight="700" fill="#38bdf8" letter-spacing="1">
+        CONTINUOUS AEC WORKFLOW PIPELINE
+      </text>
+
+      <!-- Connecting Animated Flow Bus -->
+      <line x1="20" y1="36" x2="550" y2="36" stroke="#1e3a5f" stroke-width="3" />
+      <line x1="20" y1="36" x2="550" y2="36" stroke="#38bdf8" stroke-width="2" class="animated-flow" opacity="0.8" />
+
+      <!-- Node 1: Spec -->
+      <g transform="translate(30, 36)">
+        <circle cx="0" cy="0" r="10" fill="#0284c7" class="pulse-node" />
+        <circle cx="0" cy="0" r="5" fill="#ffffff" />
+        <text x="0" y="24" font-family="system-ui, sans-serif" font-size="10" font-weight="600" fill="#cbd5e1" text-anchor="middle">NL Input</text>
+        <text x="0" y="36" font-family="ui-monospace, monospace" font-size="8.5" fill="#64748b" text-anchor="middle">Spec Prompt</text>
+      </g>
+
+      <!-- Node 2: Generator -->
+      <g transform="translate(155, 36)">
+        <circle cx="0" cy="0" r="10" fill="#0284c7" class="pulse-node" />
+        <circle cx="0" cy="0" r="5" fill="#ffffff" />
+        <text x="0" y="24" font-family="system-ui, sans-serif" font-size="10" font-weight="600" fill="#cbd5e1" text-anchor="middle">Studio Gen</text>
+        <text x="0" y="36" font-family="ui-monospace, monospace" font-size="8.5" fill="#64748b" text-anchor="middle">Geometry</text>
+      </g>
+
+      <!-- Node 3: 2D/3D BIM -->
+      <g transform="translate(285, 36)">
+        <circle cx="0" cy="0" r="10" fill="#0284c7" class="pulse-node" />
+        <circle cx="0" cy="0" r="5" fill="#ffffff" />
+        <text x="0" y="24" font-family="system-ui, sans-serif" font-size="10" font-weight="600" fill="#cbd5e1" text-anchor="middle">2D/3D BIM</text>
+        <text x="0" y="36" font-family="ui-monospace, monospace" font-size="8.5" fill="#64748b" text-anchor="middle">Konva/Three</text>
+      </g>
+
+      <!-- Node 4: Audit Engine -->
+      <g transform="translate(415, 36)">
+        <circle cx="0" cy="0" r="10" fill="#10b981" class="pulse-node" />
+        <circle cx="0" cy="0" r="5" fill="#ffffff" />
+        <text x="0" y="24" font-family="system-ui, sans-serif" font-size="10" font-weight="600" fill="#34d399" text-anchor="middle">Code Audit</text>
+        <text x="0" y="36" font-family="ui-monospace, monospace" font-size="8.5" fill="#64748b" text-anchor="middle">Rule Checker</text>
+      </g>
+
+      <!-- Node 5: Deliverable -->
+      <g transform="translate(540, 36)">
+        <circle cx="0" cy="0" r="10" fill="#f59e0b" class="pulse-node" />
+        <circle cx="0" cy="0" r="5" fill="#ffffff" />
+        <text x="0" y="24" font-family="system-ui, sans-serif" font-size="10" font-weight="600" fill="#fbbf24" text-anchor="middle">Exports</text>
+        <text x="0" y="36" font-family="ui-monospace, monospace" font-size="8.5" fill="#64748b" text-anchor="middle">IFC/DXF/PDF</text>
+      </g>
+    </g>
+
+    <!-- Engineering Title Block (Bottom Right) -->
+    <g transform="translate(250, 305)">
+      <rect x="0" y="0" width="325" height="65" fill="#07111e" stroke="#1e3a5f" stroke-width="1" />
+      <line x1="0" y1="22" x2="325" y2="22" stroke="#1e3a5f" stroke-width="1" />
+      <line x1="160" y1="0" x2="160" y2="65" stroke="#1e3a5f" stroke-width="1" />
+      
+      <text x="8" y="15" font-family="ui-monospace, monospace" font-size="8.5" fill="#64748b">DRAWING NO:</text>
+      <text x="80" y="15" font-family="ui-monospace, monospace" font-size="9" font-weight="700" fill="#38bdf8">BW-AEC-2026-V2</text>
+
+      <text x="168" y="15" font-family="ui-monospace, monospace" font-size="8.5" fill="#64748b">JURISDICTION:</text>
+      <text x="245" y="15" font-family="ui-monospace, monospace" font-size="9" font-weight="700" fill="#38bdf8">ADA / IBC / NBC</text>
+
+      <text x="8" y="40" font-family="ui-monospace, monospace" font-size="8" fill="#64748b">PERSISTENCE:</text>
+      <text x="8" y="54" font-family="system-ui, sans-serif" font-size="9.5" font-weight="600" fill="#94a3b8">Neo4j Graph + Supabase</text>
+
+      <text x="168" y="40" font-family="ui-monospace, monospace" font-size="8" fill="#64748b">CAD ENGINE:</text>
+      <text x="168" y="54" font-family="system-ui, sans-serif" font-size="9.5" font-weight="600" fill="#94a3b8">Shapely • PyClipper • IFC</text>
+    </g>
+  </g>
+</svg>

@@ -1,0 +1,113 @@
+[project]
+name = "buildwiseai"
+version = "0.2.0"
+description = "BuildwiseAI: unified AEC compliance verification + AI floor plan generation"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+dependencies = [
+    # ── Web framework ──────────────────────────────────────────────────────
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "pydantic>=2.8",
+    "pydantic-settings>=2.4",
+    "python-multipart>=0.0.9",
+    "httpx>=0.27",
+    "sse-starlette>=2.1",
+
+    # ── LLM / AI ───────────────────────────────────────────────────────────
+    "pydantic-ai-slim[google,openai,anthropic]>=1.97",
+    "openai>=1.50",        # OpenAI-compatible client for SGLang / Ollama
+    "outlines>=0.1",
+
+    # ── Neo4j + embeddings ─────────────────────────────────────────────────
+    "neo4j>=5.25",
+    "fastembed>=0.5",
+
+    # ── Geometry & BIM ─────────────────────────────────────────────────────
+    "shapely>=2.0.6",
+    "pyclipper>=1.3",
+    "trimesh>=4.4",
+    "numpy>=1.26",
+    "ifcopenshell>=0.8",
+    "ezdxf>=1.3",
+    "matplotlib>=3.9",     # SVG export
+
+    # ── Compliance pipeline ────────────────────────────────────────────────
+    "graphrag>=0.5",
+    "lancedb>=0.4",
+    "sentence-transformers>=2.2",
+    "pdfplumber>=0.11",
+
+    # ── Document parsing ───────────────────────────────────────────────────
+    "pymupdf>=1.24",
+    "opencv-python-headless>=4.10",
+    "Pillow>=10.4",
+
+    # ── Database ───────────────────────────────────────────────────────────
+    "supabase>=2.9",
+
+    # ── ML inference (Modal remote GPU) ───────────────────────────────────
+    "modal>=0.73",
+
+    # ── Task queue ─────────────────────────────────────────────────────────
+    "celery[redis]>=5.4",
+
+    # ── Utilities ──────────────────────────────────────────────────────────
+    "python-dotenv>=1.0",
+    "structlog>=24.4",
+    "orjson>=3.10",
+]
+
+[project.optional-dependencies]
+docling = ["docling>=2.15"]
+ml = [
+    # Install only on GPU machines
+    "torch>=2.4",
+    "torchvision>=0.19",
+    "torch-geometric>=2.6",
+    "diffusers>=0.30",
+    "transformers>=4.45",
+    "accelerate>=0.34",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=5.0",
+    "httpx>=0.27",
+    "inline-snapshot>=0.20",
+    "ruff>=0.7",
+    "mypy>=1.11",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+# Both top-level packages must be on the wheel so `import planlint` and
+# `import app` work wherever the package is installed.
+packages = ["planlint", "app"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+# Snapshots compare as plain values by default (no interactive fix prompts —
+# critical for CI/agents). Update intentionally with: pytest --inline-snapshot=fix
+addopts = "--inline-snapshot=disable"
+markers = [
+    "integration: requires a live Neo4j instance (docker compose up neo4j)",
+    "docling: exercises the real Docling layout parser (slow; skipped when docling is missing)",
+]
+
+[tool.inline-snapshot]
+default-flags = ["report"]  # never prompt interactively (CI/agent safety)
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "SIM"]

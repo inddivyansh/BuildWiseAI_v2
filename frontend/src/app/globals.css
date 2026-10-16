@@ -1,0 +1,126 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+  --color-surface-0: #0b0d12; /* page background */
+  --color-surface-1: #12151c; /* panels, topbar */
+  --color-surface-2: #1a1e28; /* inputs, chips, hover */
+  --color-edge: #262c38;      /* borders */
+  --color-ink: #e7eaf0;       /* primary text */
+  --color-ink-dim: #98a1b3;   /* secondary text */
+  --color-accent: #5b8cff;
+  --color-pass: #34d399;      /* COMPLIES_WITH */
+  --color-fail: #f87171;      /* VIOLATES */
+  --color-review: #fbbf24;    /* NEEDS_REVIEW */
+
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Code", Consolas, monospace;
+}
+
+:root {
+  --background: 224 25% 6%;
+  --foreground: 220 15% 95%;
+  --card: 224 22% 9%;
+  --card-foreground: 220 15% 95%;
+  --popover: 224 22% 9%;
+  --popover-foreground: 220 15% 95%;
+  --primary: 221 83% 53%;
+  --primary-foreground: 210 40% 98%;
+  --secondary: 224 20% 14%;
+  --secondary-foreground: 210 40% 98%;
+  --muted: 224 20% 14%;
+  --muted-foreground: 220 10% 65%;
+  --accent: 224 20% 14%;
+  --accent-foreground: 210 40% 98%;
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 210 40% 98%;
+  --border: 224 18% 18%;
+  --input: 224 18% 18%;
+  --ring: 221 83% 53%;
+  --radius: 0.5rem;
+}
+
+.dark {
+  --background: 224 25% 6%;
+  --foreground: 220 15% 95%;
+  --card: 224 22% 9%;
+  --card-foreground: 220 15% 95%;
+  --popover: 224 22% 9%;
+  --popover-foreground: 220 15% 95%;
+  --primary: 221 83% 53%;
+  --primary-foreground: 210 40% 98%;
+  --secondary: 224 20% 14%;
+  --secondary-foreground: 210 40% 98%;
+  --muted: 224 20% 14%;
+  --muted-foreground: 220 10% 65%;
+  --accent: 224 20% 14%;
+  --accent-foreground: 210 40% 98%;
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 210 40% 98%;
+  --border: 224 18% 18%;
+  --input: 224 18% 18%;
+  --ring: 221 83% 53%;
+}
+
+@layer base {
+  html {
+    color-scheme: dark;
+  }
+  * {
+    border-color: hsl(var(--border));
+  }
+  body {
+    background-color: #0b0d12;
+    color: #e7eaf0;
+    font-family: var(--font-sans);
+    font-size: 0.875rem;
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+/* Glassmorphism utility */
+.glass {
+  background-color: rgba(11, 13, 18, 0.75);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(38, 44, 56, 0.6);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(152, 161, 179, 0.25);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(152, 161, 179, 0.4);
+}
+
+/* Canvas cursor styles */
+.cursor-grab { cursor: grab; }
+.cursor-grab:active { cursor: grabbing; }
+.cursor-crosshair { cursor: crosshair; }

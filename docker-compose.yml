@@ -1,0 +1,129 @@
+# ==============================================================================
+# BuildWise v2 — Unified AEC Platform Docker Compose
+# ==============================================================================
+# Services:
+#   1. frontend  — Next.js 14 App Router (2D/3D Canvas, Project Dashboard, Inspector)
+#   2. backend   — FastAPI Gateway (Plan Compliance, Blueprint Studio, CAD Exporters)
+#   3. neo4j     — Graph Database (Durable Projects, Blueprints, & Compliance Audits)
+#
+# Usage:
+#   docker compose up --build -d
+#   docker compose logs -f
+# ==============================================================================
+
+version: "3.9"
+
+services:
+  # ── Backend API & Domain Services ──────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: buildwise-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8000
+      - CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+      # Neo4j Graph Connection (uses container service name)
+      - NEO4J_URI=bolt://neo4j:7687
+      - NEO4J_USER=${NEO4J_USER:-neo4j}
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD:-buildwise_dev_pass}
+      # Multi-tenant Auth (defaults to local development mode if Supabase keys unset)
+      - AUTH_REQUIRED=${AUTH_REQUIRED:-false}
+      - SUPABASE_URL=${SUPABASE_URL:-}
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY:-}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY:-}
+      - SUPABASE_JWT_SECRET=${SUPABASE_JWT_SECRET:-}
+      # LLM & Generation Providers (optional; fallback mock engines active when unset)
+      - LLM_PROVIDER=${LLM_PROVIDER:-gemini}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      # Compliance Engine Configuration
+      - PLANLINT_SEMANTIC_PARSER=auto
+      - PLANLINT_OFFLINE_SAMPLE=${PLANLINT_OFFLINE_SAMPLE:-1}
+      - COMPLIANCE_ENABLED=true
+    volumes:
+      - backend_storage:/app/storage
+      - backend_data:/app/data
+    depends_on:
+      neo4j:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
+    networks:
+      - buildwise_net
+
+  # ── Frontend Web Application ───────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+        - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL:-}
+        - NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}
+    container_name: buildwise-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - HOSTNAME=0.0.0.0
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+      - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL:-}
+      - NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - buildwise_net
+
+  # ── Knowledge Graph Database ───────────────────────────────────────────────
+  neo4j:
+    image: neo4j:5-community
+    container_name: buildwise-neo4j
+    ports:
+      - "7474:7474"  # Web Browser UI
+      - "7687:7687"  # Bolt protocol
+    environment:
+      - NEO4J_AUTH=${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-buildwise_dev_pass}
+      - NEO4J_PLUGINS=["apoc"]
+      - NEO4J_dbms_security_procedures_unrestricted=apoc.*
+      - NEO4J_dbms_memory_heap_initial__size=512m
+      - NEO4J_dbms_memory_heap_max__size=1G
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+    healthcheck:
+      test: ["CMD", "neo4j-admin", "server", "status"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 25s
+    restart: unless-stopped
+    networks:
+      - buildwise_net
+
+volumes:
+  backend_storage:
+    name: buildwise_backend_storage
+  backend_data:
+    name: buildwise_backend_data
+  neo4j_data:
+    name: buildwise_neo4j_data
+  neo4j_logs:
+    name: buildwise_neo4j_logs
+
+networks:
+  buildwise_net:
+    name: buildwise_network
+    driver: bridge
