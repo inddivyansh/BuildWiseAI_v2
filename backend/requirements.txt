@@ -28,7 +28,7 @@ ezdxf>=1.3.0
 matplotlib>=3.8.0
 
 # Compliance & Document Ingestion
-graphrag>=0.3.0
+# Note: GraphRAG extraction in this project is implemented directly via Gemini (app/services/compliance/graphrag_extractor.py), not Microsoft's graphrag library.
 lancedb>=0.4.0
 sentence-transformers>=2.2.0
 pdfplumber>=0.11.0

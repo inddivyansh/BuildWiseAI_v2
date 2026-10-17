@@ -34,7 +34,6 @@ dependencies = [
     "matplotlib>=3.9",     # SVG export
 
     # ── Compliance pipeline ────────────────────────────────────────────────
-    "graphrag>=0.5",
     "lancedb>=0.4",
     "sentence-transformers>=2.2",
     "pdfplumber>=0.11",
