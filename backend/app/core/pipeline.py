@@ -247,6 +247,10 @@ class GenerationPipeline:
         if zone_id and not spec.zone_id:
             spec.zone_id = zone_id
 
+        # Pre-generation spatial validation & proportional balancing
+        from app.services.geometry.spatial_validator import DynamicSpatialValidator
+        spec = DynamicSpatialValidator.validate_and_correct_spec(spec, prompt=prompt, errors=errors)
+
         # Continue with parsed spec
         return await self.generate_from_spec(
             spec, generation_id, run_compliance, generator, timing, errors
@@ -272,6 +276,8 @@ class GenerationPipeline:
         # --- Layer 2: Spatial Validation + Correction ---
         t0 = time.time()
         try:
+            from app.services.geometry.spatial_validator import DynamicSpatialValidator
+            spec = DynamicSpatialValidator.validate_and_correct_spec(spec, errors=errors)
             spec = self._enforce_area_budget(spec, errors)
             timing["spatial_validation_s"] = round(time.time() - t0, 3)
         except Exception as e:
@@ -382,6 +388,10 @@ class GenerationPipeline:
         floor_plan = self._assemble_floor_plan(
             spec, cleaned, generation_id, gen.name, timing, ifc_path
         )
+
+        # Pre-output geometry validation & healing
+        from app.services.geometry.spatial_validator import DynamicSpatialValidator
+        floor_plan = DynamicSpatialValidator.validate_generated_geometry(floor_plan, errors)
 
         # --- Layer 7: Compliance ---
         compliance_result = None

@@ -755,16 +755,40 @@ async def ingest_floorplan(
                 page_type = await process_page(page_index)
                 pdf_type = pdf_type or page_type
             except Exception as error:
-                # One unreadable page (an elevation, a section, or any page the
-                # VLM can't box even after retries) must not abort the whole
-                # document — mirror the per-asset isolation in run_verification.
-                # Record the page as an empty sheet so it stays queryable, then
-                # move on.
+                # Do NOT swallow provider failures, quota exhaustion, or unresponsiveness
+                err_str = str(error).lower()
+                status_code = getattr(error, "status_code", None)
+                is_provider_error = (
+                    status_code in (429, 503, 401, 403, 502, 504)
+                    or any(
+                        k in err_str
+                        for k in (
+                            "quota",
+                            "resource_exhausted",
+                            "rate limit",
+                            "503",
+                            "unavailable",
+                            "high demand",
+                            "spikes in demand",
+                            "429",
+                            "unauthenticated",
+                            "invalid api key",
+                            "api_key",
+                            "timeout",
+                            "timed out",
+                            "connection refused",
+                        )
+                    )
+                )
+                if is_provider_error:
+                    raise error
+
+                # One unreadable page (e.g. geometric parsing glitch on a multi-page set)
+                # must not abort the whole document.
                 await emit(
                     RunEvent(
                         stage="ingest:spatial",
-                        message=f"Page {page_index + 1}/{total}: detection failed "
-                        f"— skipped, needs manual review ({error})",
+                        message=f"Page {page_index + 1}/{total}: detection skipped ({error})",
                         level="warning",
                     )
                 )

@@ -28,8 +28,12 @@ from planlint.ingest.clause_tree import StructuredItem, _clause_start_match
 from planlint.ingest.ocr import ocr_page_text
 from planlint.ingest.vlm import RENDER_ZOOM
 from planlint.models import RegulationClause
+from planlint.retry import run_agent_with_retry
 
-_CONCURRENT_PAGES = 4
+# Gemini free tier = 5 RPM. We serialise pages (1 at a time) and pause
+# 13 s between calls to stay comfortably under the limit (~4.6 req/min).
+_CONCURRENT_PAGES = 1
+_INTER_PAGE_DELAY_S = 13.0  # seconds between sequential VLM page calls
 # Fraction of the reference's tokens that must reappear in the transcription.
 # Furniture the model correctly omits (headers, footers, page numbers) costs a
 # few tokens per page, so full agreement is never expected.
@@ -301,6 +305,10 @@ async def parse_codebook_llm(
     async def transcribe(page_index: int) -> tuple[list[StructuredItem], bool, bool]:
         """(items, unverified, failed) for one page — never raises."""
         async with semaphore:
+            # Throttle: pause before each call (except the very first) so we
+            # don't burst all pages at once and hit Gemini's 5 RPM cap.
+            if page_index > 0:
+                await asyncio.sleep(_INTER_PAGE_DELAY_S)
             prep = await asyncio.to_thread(_prepare_page, str(pdf_path), page_index)
             if not prep.needs_vlm:
                 return _items_from_markdown(prep.markdown or "", page_index), False, False
@@ -314,7 +322,8 @@ async def parse_codebook_llm(
             unverified = not reference.strip()  # blank scan: nothing to check against
 
             try:
-                result = await agent.run(
+                result = await run_agent_with_retry(
+                    agent,
                     [
                         "Transcribe this regulation page to Markdown.",
                         BinaryContent(data=prep.png or b"", media_type="image/png"),

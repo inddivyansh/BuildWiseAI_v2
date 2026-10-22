@@ -18,6 +18,7 @@ from pydantic_ai import Agent, BinaryContent, ModelRetry
 
 from planlint.ingest.vlm import RENDER_ZOOM
 from planlint.models import BBox
+from planlint.retry import run_agent_with_retry
 
 _INSTRUCTIONS = """\
 You read an architectural sheet that holds one or more DETAILS / sections / views,
@@ -101,11 +102,12 @@ async def detect_details(image_png: bytes, model) -> list[VlmDetail]:
     """Every numbered detail region on one sheet, boxes converted to PDF points."""
     img_width, img_height = struct.unpack(">II", image_png[16:24])
     agent = build_detail_agent(model)
-    result = await agent.run(
+    result = await run_agent_with_retry(
+        agent,
         [
             "Box and number each detail on this sheet.",
             BinaryContent(data=image_png, media_type="image/png"),
-        ]
+        ],
     )
     return [
         d.model_copy(update={"box": _to_points(d.box, img_width, img_height)})

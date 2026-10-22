@@ -3,6 +3,8 @@ export interface AIModel {
   name: string;
   provider: string;
   provider_name: string;
+  category?: string;
+  category_name?: string;
   tier: "free" | "premium";
   badge: string;
   capabilities: string;

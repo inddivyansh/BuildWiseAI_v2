@@ -47,15 +47,85 @@ class GraphRepository:
                 f"CREATE CONSTRAINT {label.lower()}_id IF NOT EXISTS "
                 f"FOR (n:{label}) REQUIRE n.id IS UNIQUE"
             )
-        await self._run(
-            "CREATE INDEX project_user_id IF NOT EXISTS FOR (p:Project) ON (p.user_id)"
-        )
+
+        # Node property indexes for frequent lookups
+        await self._run("CREATE INDEX project_user_id IF NOT EXISTS FOR (p:Project) ON (p.user_id)")
+        await self._run("CREATE INDEX document_project_id IF NOT EXISTS FOR (d:Document) ON (d.project_id)")
+        await self._run("CREATE INDEX sheet_project_id IF NOT EXISTS FOR (s:Sheet) ON (s.project_id)")
+        await self._run("CREATE INDEX sheet_number IF NOT EXISTS FOR (s:Sheet) ON (s.sheet_number)")
+        await self._run("CREATE INDEX asset_project_id IF NOT EXISTS FOR (a:PhysicalAsset) ON (a.project_id)")
+        await self._run("CREATE INDEX regulation_project_id IF NOT EXISTS FOR (r:Regulation) ON (r.project_id)")
+        await self._run("CREATE INDEX regulation_clause_id IF NOT EXISTS FOR (r:Regulation) ON (r.clause_id)")
+        await self._run("CREATE INDEX spec_project_id IF NOT EXISTS FOR (sp:Spec) ON (sp.project_id)")
+        await self._run("CREATE INDEX detail_project_id IF NOT EXISTS FOR (dt:Detail) ON (dt.project_id)")
+        await self._run("CREATE INDEX blueprint_project_id IF NOT EXISTS FOR (b:Blueprint) ON (b.project_id)")
+
+        # Relationship property indexes
+        for rel in ("COMPLIES_WITH", "VIOLATES", "NEEDS_REVIEW"):
+            await self._run(f"CREATE INDEX {rel.lower()}_run_id IF NOT EXISTS FOR ()-[r:{rel}]-() ON (r.run_id)")
+            await self._run(f"CREATE INDEX {rel.lower()}_checked_at IF NOT EXISTS FOR ()-[r:{rel}]-() ON (r.checked_at)")
+        await self._run("CREATE INDEX references_kind IF NOT EXISTS FOR ()-[r:REFERENCES]-() ON (r.kind)")
+        await self._run("CREATE INDEX detailed_by_kind IF NOT EXISTS FOR ()-[r:DETAILED_BY]-() ON (r.kind)")
+
+        # Vector index for regulation semantic search
         await self._run(
             "CREATE VECTOR INDEX regulation_embedding IF NOT EXISTS "
             "FOR (r:Regulation) ON (r.embedding) "
             "OPTIONS {indexConfig: {`vector.dimensions`: $dims, "
             "`vector.similarity_function`: 'cosine'}}",
             dims=settings.embed_dimensions,
+        )
+
+        # Register all application property keys and relationship types in Neo4j's schema catalog
+        # so queries compile cleanly without 01N51 / 01N52 undefined token warnings.
+        await self._run(
+            """
+            MERGE (m:_SchemaMeta {id: 'schema_anchor'})
+            SET m.run_id = coalesce(m.run_id, 'schema'),
+                m.checked_at = coalesce(m.checked_at, 'schema'),
+                m.measured = coalesce(m.measured, 'schema'),
+                m.required = coalesce(m.required, 'schema'),
+                m.reason = coalesce(m.reason, 'schema'),
+                m.clause_id = coalesce(m.clause_id, 'schema'),
+                m.clause_page = coalesce(m.clause_page, 0),
+                m.clause_bbox = coalesce(m.clause_bbox, [0.0]),
+                m.clause_document_id = coalesce(m.clause_document_id, 'schema'),
+                m.document_id = coalesce(m.document_id, 'schema'),
+                m.detail_num = coalesce(m.detail_num, 'schema'),
+                m.sheet_number = coalesce(m.sheet_number, 'schema'),
+                m.number = coalesce(m.number, 'schema'),
+                m.title = coalesce(m.title, 'schema'),
+                m.notes = coalesce(m.notes, 'schema'),
+                m.code = coalesce(m.code, 'schema'),
+                m.category = coalesce(m.category, 'schema'),
+                m.hierarchy_path = coalesce(m.hierarchy_path, 'schema'),
+                m.text = coalesce(m.text, 'schema'),
+                m.page = coalesce(m.page, 0),
+                m.constraints_extracted = coalesce(m.constraints_extracted, false),
+                m.target_sheet = coalesce(m.target_sheet, 'schema'),
+                m.target_sheet_number = coalesce(m.target_sheet_number, 'schema'),
+                m.confidence = coalesce(m.confidence, 1.0),
+                m.regulation_id = coalesce(m.regulation_id, 'schema'),
+                m.asset_type = coalesce(m.asset_type, 'schema'),
+                m.operator = coalesce(m.operator, 'schema'),
+                m.threshold = coalesce(m.threshold, 0.0),
+                m.unit = coalesce(m.unit, 'schema'),
+                m.expression = coalesce(m.expression, 'schema'),
+                m.is_mandatory = coalesce(m.is_mandatory, true),
+                m.rationale = coalesce(m.rationale, 'schema'),
+                m.parent_clause_id = coalesce(m.parent_clause_id, 'schema'),
+                m.source_asset_id = coalesce(m.source_asset_id, 'schema')
+            MERGE (m)-[:SPECIFIED_BY]->(m)
+            MERGE (m)-[:HAS_DETAIL]->(m)
+            MERGE (m)-[:HAS_SHEET]->(m)
+            MERGE (m)-[:HAS_CLAUSE]->(m)
+            MERGE (m)-[:CONTAINS]->(m)
+            MERGE (m)-[:DEFINES]->(m)
+            MERGE (m)-[:PARENT_OF]->(m)
+            MERGE (m)-[:HAS_SPEC]->(m)
+            MERGE (m)-[:HAS_DOCUMENT]->(m)
+            MERGE (m)-[:HAS_BLUEPRINT]->(m)
+            """
         )
 
     # ------------------------------------------------------------ projects

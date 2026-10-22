@@ -14,6 +14,7 @@ from pydantic_ai import Agent, BinaryContent, ModelRetry
 
 from planlint.ingest.sheet_type import SheetType
 from planlint.models import AssetType, BBox
+from planlint.retry import run_agent_with_retry
 
 import re
 import struct
@@ -216,11 +217,12 @@ async def detect_page(image_png: bytes, model) -> VlmPage:
     # PNG dimensions start at byte offset 16 (4 bytes width, 4 bytes height)
     img_width, img_height = struct.unpack(">II", image_png[16:24])
     agent = build_detection_agent(model)
-    result = await agent.run(
+    result = await run_agent_with_retry(
+        agent,
         [
             "Detect all compliance-relevant entities on this floor plan page.",
             BinaryContent(data=image_png, media_type="image/png"),
-        ]
+        ],
     )
     def to_points(box: BBox) -> BBox:
         # De-normalize [0, 1000] → image pixels → PDF points.
@@ -295,11 +297,12 @@ async def classify_sheet_page(image_png: bytes, model) -> SheetType:
     """Classify one rendered sheet image into a SheetType via the VLM — the no-text
     fallback for the deterministic title classifier."""
     agent = build_sheet_classifier(model)
-    result = await agent.run(
+    result = await run_agent_with_retry(
+        agent,
         [
             "Classify this architectural drawing sheet.",
             BinaryContent(data=image_png, media_type="image/png"),
-        ]
+        ],
     )
     return result.output.sheet_type
 

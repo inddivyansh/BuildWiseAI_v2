@@ -9,13 +9,18 @@ interface ModelState {
   getSelectedModel: () => AIModel | undefined;
 }
 
-const DEFAULT_MODEL = "gemini-2.5-flash";
+const DEFAULT_MODEL = "gemini";
 const STORAGE_KEY = "buildwise_selected_model_id";
 
 function getInitialModelId(): string {
   if (typeof window !== "undefined") {
     const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) return saved;
+    if (saved) {
+      if (saved.startsWith("gemini-") || saved === "gemini") {
+        return "gemini";
+      }
+      return saved;
+    }
   }
   return DEFAULT_MODEL;
 }

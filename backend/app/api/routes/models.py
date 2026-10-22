@@ -36,8 +36,9 @@ async def list_ai_models() -> ModelsResponse:
     providers = get_providers_metadata()
 
     # Determine default model
-    default_model = settings.llm_model or "gemini-2.5-flash"
-    default_provider = settings.llm_provider or "gemini"
+    available_ids = {m.id for m in models if m.is_selectable}
+    default_model = "gemini" if "gemini" in available_ids else (next(iter(available_ids), "gemini"))
+    default_provider = "gemini" if default_model == "gemini" else "ollama"
 
     return ModelsResponse(
         models=models,

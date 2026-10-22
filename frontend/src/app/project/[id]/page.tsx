@@ -5,7 +5,8 @@
 // that keeps the two panes in sync in both directions.
 
 import Link from "next/link";
-import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import AssetIndex from "@/components/AssetIndex";
 import AssetInspector from "@/components/AssetInspector";
@@ -35,8 +36,10 @@ interface Selection {
 
 const KIND_ICON = { floorplan: "▤", codebook: "§" } as const;
 
-export default function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id: projectId } = use(params);
+export default function ProjectPage({ params }: { params?: { id: string } }) {
+  const routeParams = useParams();
+  const rawId = routeParams?.id ?? params?.id;
+  const projectId = Array.isArray(rawId) ? rawId[0] : (rawId ?? "");
   const [projectInfo, setProjectInfo] = useState<{ name: string; description?: string } | null>(null);
   const [results, setResults] = useState<Results | null>(null);
   const [sheetIndex, setSheetIndex] = useState(0);

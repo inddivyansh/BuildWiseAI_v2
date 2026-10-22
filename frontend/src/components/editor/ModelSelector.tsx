@@ -6,16 +6,10 @@ import {
   Sparkles,
   ChevronDown,
   Check,
-  Lock,
   AlertTriangle,
-  Zap,
   HardDrive,
-  Cpu,
-  Info,
   ExternalLink,
 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { getAvailableModels } from "@/lib/api";
 import { useModelStore } from "@/stores/modelStore";
 import type { AIModel } from "@/types/model";
@@ -27,12 +21,15 @@ interface ModelSelectorProps {
   onModelChange?: (model: AIModel) => void;
 }
 
+type CategoryFilter = "all" | "gemini" | "ollama";
+
 export function ModelSelector({
   compact = false,
   className = "",
   onModelChange,
 }: ModelSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [activeCategory, setActiveCategory] = useState<CategoryFilter>("all");
   const containerRef = useRef<HTMLDivElement>(null);
 
   const { selectedModelId, setSelectedModelId, setModelsData } = useModelStore();
@@ -67,45 +64,69 @@ export function ModelSelector({
   const allModels = modelsData?.models || [];
   const selectedModel = allModels.find((m) => m.id === selectedModelId) || allModels[0];
 
-  const freeModels = allModels.filter((m) => m.tier === "free");
-  const premiumModels = allModels.filter((m) => m.tier === "premium");
-
   const handleSelect = (model: AIModel) => {
     if (!model.is_selectable) {
-      toast.info(`'${model.name}' is coming soon in the upcoming commercial release.`);
+      toast.info(`'${model.name}' is currently unavailable.`);
       return;
     }
 
-    if (!model.is_available && model.requires_key) {
-      toast.warning(
-        `Please configure ${model.env_key_name} in your .env file to enable ${model.name}.`,
-        {
-          description: "Free-tier API keys can be obtained with zero billing from the provider.",
-          duration: 6000,
-        }
-      );
+    if (model.provider === "ollama") {
+      toast.success(`Active Local Model: ${model.name}`, {
+        description: "Connects to your local Ollama daemon (localhost:11434).",
+      });
+    } else {
+      toast.success(`Active Model: ${model.name}`);
     }
 
     setSelectedModelId(model.id);
     onModelChange?.(model);
     setIsOpen(false);
-    toast.success(`Active AI Model: ${model.name}`);
   };
 
   const getProviderIcon = (provider: string) => {
     switch (provider) {
       case "gemini":
         return <Sparkles className="size-3.5 text-blue-400" />;
-      case "groq":
-        return <Zap className="size-3.5 text-orange-400" />;
-      case "xai":
-        return <Cpu className="size-3.5 text-purple-400" />;
       case "ollama":
         return <HardDrive className="size-3.5 text-emerald-400" />;
       default:
         return <Sparkles className="size-3.5 text-accent" />;
     }
   };
+
+  const categoriesOrder = ["gemini", "ollama"];
+  const categoryMeta: Record<string, { title: string; badge: string; subtitle: string }> = {
+    gemini: {
+      title: "Google Gemini",
+      badge: "Auto-Failover",
+      subtitle: "Free Tier • Auto-shifts models if quota is reached",
+    },
+    ollama: {
+      title: "Local Models (Ollama)",
+      badge: "Local (Offline)",
+      subtitle: "100% Private Offline (Qwen & Gemma)",
+    },
+  };
+
+  const filteredModels = allModels.filter((m) => {
+    if (activeCategory === "gemini") return m.provider === "gemini";
+    if (activeCategory === "ollama") return m.provider === "ollama";
+    return true;
+  });
+
+  const groupedCategories = categoriesOrder
+    .map((catKey) => {
+      const models = filteredModels.filter((m) => (m.category || m.provider) === catKey);
+      return {
+        key: catKey,
+        info: categoryMeta[catKey] || { title: catKey.toUpperCase(), badge: "Free", subtitle: "" },
+        models,
+      };
+    })
+    .filter((g) => g.models.length > 0);
+
+  const geminiCount = allModels.filter((m) => m.provider === "gemini").length;
+  const ollamaCount = allModels.filter((m) => m.provider === "ollama").length;
 
   return (
     <div className={`relative inline-block ${className}`} ref={containerRef}>
@@ -119,13 +140,22 @@ export function ModelSelector({
             ? "px-2 py-1 bg-surface-1/80 hover:bg-surface-2 border-edge text-ink hover:text-ink-bright"
             : "px-3 py-1.5 bg-surface-1 hover:bg-surface-2 border-edge text-ink shadow-sm"
         }`}
-        title="Select AI Model (Free-Tier & Local Models)"
+        title="Select AI Model (Google Gemini & Local Ollama)"
       >
-        <span className="flex items-center gap-1.5 truncate max-w-[200px]">
+        <span className="flex items-center gap-1.5 truncate max-w-[220px]">
           {selectedModel ? (
             <>
               {getProviderIcon(selectedModel.provider)}
               <span className="truncate">{selectedModel.name}</span>
+              <span
+                className={`text-[9px] px-1 py-0.2 rounded font-semibold shrink-0 uppercase tracking-wider ${
+                  selectedModel.provider === "ollama"
+                    ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
+                    : "bg-blue-500/15 text-blue-400 border border-blue-500/30"
+                }`}
+              >
+                {selectedModel.provider === "ollama" ? "Local" : "Auto-Failover"}
+              </span>
             </>
           ) : (
             <>
@@ -138,9 +168,11 @@ export function ModelSelector({
         {selectedModel && (
           <span
             className={`inline-block size-1.5 rounded-full shrink-0 ${
-              selectedModel.is_available ? "bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.5)]" : "bg-amber-500"
+              selectedModel.is_available
+                ? "bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.5)]"
+                : "bg-amber-500"
             }`}
-            title={selectedModel.is_available ? "Ready & Available" : `Needs ${selectedModel.env_key_name}`}
+            title={selectedModel.is_available ? "Ready & Available" : `Needs configuration`}
           />
         )}
 
@@ -149,123 +181,155 @@ export function ModelSelector({
 
       {/* Popover / Dropdown Menu */}
       {isOpen && (
-        <div className="absolute bottom-full mb-1.5 left-0 z-50 w-84 sm:w-96 rounded-xl border border-edge bg-surface-1 p-2 text-ink shadow-2xl backdrop-blur-xl animate-in fade-in-0 zoom-in-95">
+        <div className="absolute bottom-full mb-1.5 left-0 z-50 w-84 sm:w-[400px] rounded-xl border border-edge bg-surface-1 p-2.5 text-ink shadow-2xl backdrop-blur-xl animate-in fade-in-0 zoom-in-95">
           {/* Header */}
-          <div className="px-2.5 py-1.5 border-b border-edge/60 mb-1.5 flex items-center justify-between">
+          <div className="px-1.5 py-1 border-b border-edge/60 mb-2 flex items-center justify-between">
             <div>
               <div className="text-[11px] font-semibold text-ink-bright uppercase tracking-wider flex items-center gap-1.5">
                 <Sparkles className="size-3 text-accent" />
                 AI Model Engine
               </div>
               <div className="text-[10px] text-ink-dim">
-                Prioritizing free-tier APIs and local inference
+                Google Gemini (Auto-Failover) & 2 Local Models (Qwen, Gemma)
               </div>
             </div>
-            <span className="text-[10px] text-pass font-medium bg-pass/10 px-1.5 py-0.5 rounded border border-pass/20">
-              Free Tiers Active
+            <span className="text-emerald-400 font-medium bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 text-[10px]">
+              100% Free
             </span>
           </div>
 
-          <div className="max-h-[360px] overflow-y-auto space-y-3 pr-1 text-xs">
-            {/* Group 1: Free Tier Models */}
-            <div>
-              <div className="px-2.5 py-1 text-[10px] font-semibold text-ink-dim uppercase tracking-wider flex items-center justify-between">
-                <span>Free-Tier & Local Models</span>
-                <span className="text-ink-muted text-[9px]">Selectable</span>
-              </div>
+          {/* Category Filter Pills */}
+          <div className="flex items-center gap-1 px-1 mb-2">
+            <button
+              type="button"
+              onClick={() => setActiveCategory("all")}
+              className={`text-[10px] font-medium px-2 py-0.5 rounded-md transition-all ${
+                activeCategory === "all"
+                  ? "bg-surface-2 text-ink-bright shadow-sm border border-edge"
+                  : "text-ink-dim hover:text-ink"
+              }`}
+            >
+              All Models ({allModels.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveCategory("gemini")}
+              className={`text-[10px] font-medium px-2 py-0.5 rounded-md transition-all flex items-center gap-1 ${
+                activeCategory === "gemini"
+                  ? "bg-blue-500/15 text-blue-400 shadow-sm border border-blue-500/30"
+                  : "text-ink-dim hover:text-blue-400"
+              }`}
+            >
+              <Sparkles className="size-2.5 text-blue-400" />
+              Google Gemini ({geminiCount})
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveCategory("ollama")}
+              className={`text-[10px] font-medium px-2 py-0.5 rounded-md transition-all flex items-center gap-1 ${
+                activeCategory === "ollama"
+                  ? "bg-emerald-500/15 text-emerald-400 shadow-sm border border-emerald-500/30"
+                  : "text-ink-dim hover:text-emerald-400"
+              }`}
+            >
+              <HardDrive className="size-2.5 text-emerald-400" />
+              Ollama Local ({ollamaCount})
+            </button>
+          </div>
 
-              <div className="space-y-1 mt-0.5">
-                {freeModels.map((model) => {
-                  const isSelected = model.id === selectedModelId;
-                  return (
-                    <button
-                      key={model.id}
-                      type="button"
-                      onClick={() => handleSelect(model)}
-                      className={`w-full text-left p-2 rounded-lg transition-all flex flex-col gap-1 border ${
-                        isSelected
-                          ? "bg-accent/15 border-accent/40 text-ink-bright shadow-sm"
-                          : "hover:bg-surface-2/60 border-transparent text-ink"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-1.5">
-                        <div className="flex items-center gap-1.5 font-medium">
-                          {getProviderIcon(model.provider)}
-                          <span className="font-semibold text-ink-bright">{model.name}</span>
-                          <span
-                            className={`inline-block size-1.5 rounded-full ${
-                              model.is_available ? "bg-emerald-500" : "bg-amber-500"
-                            }`}
-                            title={model.is_available ? "Available" : "Unconfigured key"}
-                          />
-                        </div>
-
-                        <div className="flex items-center gap-1 shrink-0">
-                          <span className="text-[10px] px-1.5 py-0.2 rounded-full font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/25">
-                            {model.badge}
-                          </span>
-                          {isSelected && <Check className="size-3 text-accent ml-1" />}
-                        </div>
-                      </div>
-
-                      <div className="text-[11px] text-ink-dim leading-snug line-clamp-1">
-                        {model.capabilities}
-                      </div>
-
-                      {!model.is_available && model.requires_key && (
-                        <div className="text-[10px] text-amber-400/90 flex items-center gap-1 mt-0.5 bg-amber-500/10 px-1.5 py-0.5 rounded">
-                          <AlertTriangle className="size-2.5 shrink-0" />
-                          <span>Requires {model.env_key_name} in .env</span>
-                        </div>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Group 2: Premium Models — Coming Soon */}
-            <div className="border-t border-edge/60 pt-2">
-              <div className="px-2.5 py-1 text-[10px] font-semibold text-ink-dim uppercase tracking-wider flex items-center justify-between">
-                <span>Premium Models</span>
-                <span className="text-amber-400 text-[9px] font-medium">Coming Soon</span>
-              </div>
-
-              <div className="space-y-1 mt-0.5">
-                {premiumModels.map((model) => (
-                  <div
-                    key={model.id}
-                    className="p-2 rounded-lg border border-edge/30 bg-surface-0/40 text-ink-muted flex flex-col gap-0.5 cursor-not-allowed opacity-60"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5 font-medium">
-                        <Lock className="size-3 text-ink-dim" />
-                        <span>{model.name}</span>
-                        <span className="text-[10px] text-ink-dim/80">({model.provider_name})</span>
-                      </div>
-                      <Badge variant="outline" className="text-[9px] px-1.5 py-0 border-amber-500/30 text-amber-400/90">
-                        Coming Soon
-                      </Badge>
-                    </div>
-                    <div className="text-[10px] text-ink-dim pl-4">
-                      Selection disabled in current release • Commercial premium tier
-                    </div>
+          <div className="max-h-[380px] overflow-y-auto space-y-3 pr-1 text-xs">
+            {groupedCategories.map((group) => (
+              <div key={group.key} className="space-y-1">
+                {/* Category Header */}
+                <div className="px-2 py-0.5 text-[10px] font-semibold text-ink-dim uppercase tracking-wider flex items-center justify-between border-b border-edge/30 pb-1">
+                  <div className="flex items-center gap-1.5">
+                    {getProviderIcon(group.key)}
+                    <span className="text-ink-bright font-medium">{group.info.title}</span>
                   </div>
-                ))}
+                  <span className="text-[9px] px-1.5 py-0.2 rounded-full font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/25">
+                    {group.info.badge}
+                  </span>
+                </div>
+
+                {/* Models in Category */}
+                <div className="space-y-1">
+                  {group.models.map((model) => {
+                    const isSelected = model.id === selectedModelId;
+                    return (
+                      <button
+                        key={model.id}
+                        type="button"
+                        onClick={() => handleSelect(model)}
+                        className={`w-full text-left p-2 rounded-lg transition-all flex flex-col gap-1 border ${
+                          isSelected
+                            ? "bg-accent/15 border-accent/40 text-ink-bright shadow-sm"
+                            : "hover:bg-surface-2/60 border-transparent text-ink"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-1.5">
+                          <div className="flex items-center gap-1.5 font-medium">
+                            <span className="font-semibold text-ink-bright text-xs">{model.name}</span>
+                            <span
+                              className={`inline-block size-1.5 rounded-full ${
+                                model.is_available ? "bg-emerald-500" : "bg-amber-500"
+                              }`}
+                              title={model.is_available ? "Available" : "Needs setup"}
+                            />
+                          </div>
+
+                          <div className="flex items-center gap-1 shrink-0">
+                            <span className="text-[9px] px-1.5 py-0.2 rounded font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                              {model.badge}
+                            </span>
+                            {isSelected && <Check className="size-3 text-accent ml-1" />}
+                          </div>
+                        </div>
+
+                        <div className="text-[11px] text-ink-dim leading-snug line-clamp-1">
+                          {model.capabilities}
+                        </div>
+
+                        {/* Local Ollama helper note */}
+                        {model.provider === "ollama" && (
+                          <div className="text-[10px] text-emerald-400/90 flex items-center gap-1 mt-0.5 bg-emerald-500/10 px-1.5 py-0.5 rounded">
+                            <HardDrive className="size-2.5 shrink-0" />
+                            <span>Zero API keys • Runs offline on localhost:11434</span>
+                          </div>
+                        )}
+
+                        {/* Gemini auto-failover helper note */}
+                        {model.provider === "gemini" && model.is_available && (
+                          <div className="text-[10px] text-blue-400/90 flex items-center gap-1 mt-0.5 bg-blue-500/10 px-1.5 py-0.5 rounded">
+                            <Sparkles className="size-2.5 shrink-0" />
+                            <span>Auto-shifts to next Gemini model if quota or rate limit is reached</span>
+                          </div>
+                        )}
+
+                        {/* Gemini key note if unconfigured */}
+                        {model.provider === "gemini" && !model.is_available && (
+                          <div className="text-[10px] text-amber-400/90 flex items-center gap-1 mt-0.5 bg-amber-500/10 px-1.5 py-0.5 rounded">
+                            <AlertTriangle className="size-2.5 shrink-0" />
+                            <span>Requires GEMINI_API_KEY in .env</span>
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
+            ))}
           </div>
 
           {/* Footer with key help */}
           <div className="mt-2 pt-2 border-t border-edge/60 px-2 flex items-center justify-between text-[10px] text-ink-dim">
-            <span>Free keys take ~1 minute to generate</span>
+            <span>Free: Google Gemini (Auto-Failover) & 2 Local Models</span>
             <a
               href="https://aistudio.google.com/app/apikey"
               target="_blank"
               rel="noreferrer"
               className="text-accent hover:underline flex items-center gap-0.5"
             >
-              Get Gemini Key <ExternalLink className="size-2.5" />
+              AI Studio Free Key <ExternalLink className="size-2.5" />
             </a>
           </div>
         </div>

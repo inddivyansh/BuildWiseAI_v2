@@ -20,6 +20,7 @@ import { useAuth } from "@/context/AuthContext";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -132,28 +133,30 @@ export function Navbar() {
                     <p className="text-[10px] text-ink-dim font-normal">Tenant Owner</p>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator className="my-1 bg-edge" />
-                  <DropdownMenuItem
-                    className="flex items-center gap-2 px-2 py-1.5 text-xs rounded hover:bg-surface-2 cursor-pointer"
-                    onClick={() => router.push("/projects")}
-                  >
-                    <FolderKanban size={14} className="text-ink-dim" />
-                    My Projects
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    className="flex items-center gap-2 px-2 py-1.5 text-xs rounded hover:bg-surface-2 cursor-pointer"
-                    onClick={() => router.push("/projects?tab=compliance")}
-                  >
-                    <FileCheck2 size={14} className="text-ink-dim" />
-                    Compliance Workspace
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator className="my-1 bg-edge" />
-                  <DropdownMenuItem
-                    className="flex items-center gap-2 px-2 py-1.5 text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded cursor-pointer transition-colors"
-                    onClick={handleSignOut}
-                  >
-                    <LogOut size={14} />
-                    Sign Out
-                  </DropdownMenuItem>
+                  <DropdownMenuGroup>
+                    <DropdownMenuItem
+                      className="flex items-center gap-2 px-2 py-1.5 text-xs rounded hover:bg-surface-2 cursor-pointer"
+                      onClick={() => router.push("/projects")}
+                    >
+                      <FolderKanban size={14} className="text-ink-dim" />
+                      My Projects
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      className="flex items-center gap-2 px-2 py-1.5 text-xs rounded hover:bg-surface-2 cursor-pointer"
+                      onClick={() => router.push("/projects?tab=compliance")}
+                    >
+                      <FileCheck2 size={14} className="text-ink-dim" />
+                      Compliance Workspace
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator className="my-1 bg-edge" />
+                    <DropdownMenuItem
+                      className="flex items-center gap-2 px-2 py-1.5 text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded cursor-pointer transition-colors"
+                      onClick={handleSignOut}
+                    >
+                      <LogOut size={14} />
+                      Sign Out
+                    </DropdownMenuItem>
+                  </DropdownMenuGroup>
                 </DropdownMenuContent>
               </DropdownMenu>
             ) : (

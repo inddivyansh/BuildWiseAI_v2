@@ -46,11 +46,25 @@ function LoginForm() {
     }
   }
 
-  function handleQuickDemo() {
+  async function handleQuickDemo() {
     setEmail("architect@buildwise.ai");
     setPassword("DemoPassword123!");
     setError(null);
+    setLoading(true);
+    try {
+      await signIn("architect@buildwise.ai", "DemoPassword123!");
+      toast.success("Welcome, Demo Architect!");
+      router.replace(redirectPath);
+    } catch (err: any) {
+      const msg = err.message || "Failed to sign in with demo account.";
+      setError(msg);
+      toast.error(msg);
+    } finally {
+      setLoading(false);
+    }
   }
+
+
 
   return (
     <div className="min-h-screen w-full bg-surface-0 flex flex-col justify-center items-center px-4 sm:px-6 lg:px-8 relative overflow-hidden">
@@ -160,16 +174,20 @@ function LoginForm() {
 
           {/* Quick Demo Helper */}
           <div className="mt-5 pt-4 border-t border-edge flex items-center justify-between">
-            <span className="text-[11px] text-ink-dim">Testing locally?</span>
+            <div>
+              <span className="text-[11px] font-medium text-ink">Demo Account</span>
+              <p className="text-[10px] text-ink-dim">architect@buildwise.ai</p>
+            </div>
             <Button
               type="button"
               variant="outline"
               size="sm"
               onClick={handleQuickDemo}
-              className="text-xs h-7 border-edge hover:bg-surface-2 text-ink flex items-center gap-1.5"
+              disabled={loading}
+              className="text-xs h-7 border-edge hover:bg-surface-2 text-ink flex items-center gap-1.5 cursor-pointer"
             >
               <Sparkles size={13} className="text-accent" />
-              Fill Demo Account
+              1-Click Demo Sign In
             </Button>
           </div>
         </Card>

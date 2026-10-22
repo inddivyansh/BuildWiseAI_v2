@@ -26,7 +26,6 @@ from app.schemas.generation import GenerateRequest, GenerateResponse
 from app.schemas.floor_plan import FloorPlanSpec, GeneratedFloorPlan, ComplianceResult
 from app.core.pipeline import GenerationPipeline
 from app.core.store import plan_store
-from app.services.generation.mock import generate_mock_floor_plan
 from planlint.api.auth import AuthenticatedUser, get_current_user
 
 router = APIRouter()
@@ -52,7 +51,7 @@ async def generate_floor_plan(
     Generate a floor plan from a natural language description.
 
     Uses the full pipeline: LLM → constraint solver → geometry cleanup.
-    Falls back to mock generation if LLM server is unavailable.
+    Explicitly reports an error if the LLM provider is unavailable or quota is exceeded.
 
     If `project_id` is provided the blueprint is durably persisted in Neo4j
     under that project before the response is returned.  If persistence fails
@@ -72,35 +71,52 @@ async def generate_floor_plan(
     except ValueError as val_err:
         raise HTTPException(status_code=400, detail=str(val_err))
 
-    # Initialize client for health check
+    # Initialize client for availability check
     from app.services.llm.client import LLMClient
     active_llm = LLMClient(provider=validated_provider, model=validated_model)
-    llm_ok = await active_llm.health_check()
+    llm_ok, err_msg = await active_llm.verify_availability()
 
-    if llm_ok:
-        # Full pipeline with validated LLM
-        result = await pipeline.generate_from_nl(
-            prompt=request_body.prompt,
-            plot_width_m=request_body.plot_width_m,
-            plot_depth_m=request_body.plot_depth_m,
-            locale=request_body.locale,
-            run_compliance=request_body.run_compliance,
-            generator=request_body.generator,
-            zone_id=request_body.zone_id,
-            model=validated_model,
-            provider=validated_provider,
+    if not llm_ok:
+        status_code = (
+            429 if ("429" in (err_msg or "") or "quota" in (err_msg or "").lower())
+            else 503 if ("503" in (err_msg or "") or "unavailable" in (err_msg or "").lower())
+            else 502
         )
-        if result.get("floor_plan"):
-            floor_plan = result["floor_plan"]
-            compliance = result.get("compliance")
+        raise HTTPException(
+            status_code=status_code,
+            detail=err_msg or f"{validated_provider} ({validated_model}) is unresponsive. Please check your API quota or retry shortly.",
+        )
 
-    # Fallback to mock generation if LLM unavailable or pipeline returned nothing
+    # Full pipeline with validated LLM
+    result = await pipeline.generate_from_nl(
+        prompt=request_body.prompt,
+        plot_width_m=request_body.plot_width_m,
+        plot_depth_m=request_body.plot_depth_m,
+        locale=request_body.locale,
+        run_compliance=request_body.run_compliance,
+        generator=request_body.generator,
+        zone_id=request_body.zone_id,
+        model=validated_model,
+        provider=validated_provider,
+    )
+
+    if result.get("errors"):
+        first_error = result["errors"][0]
+        err_lower = first_error.lower()
+        status_code = (
+            429 if ("429" in err_lower or "quota" in err_lower)
+            else 503 if ("503" in err_lower or "unavailable" in err_lower or "high demand" in err_lower)
+            else 500
+        )
+        raise HTTPException(status_code=status_code, detail=first_error)
+
+    floor_plan = result.get("floor_plan")
+    compliance = result.get("compliance")
+
     if floor_plan is None:
-        floor_plan = generate_mock_floor_plan(
-            prompt=request_body.prompt,
-            plot_width_m=request_body.plot_width_m,
-            plot_depth_m=request_body.plot_depth_m,
-            locale=request_body.locale,
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to generate floor plan from prompt. Please rephrase or try another model.",
         )
 
     # Always put into in-process store with user/project ownership metadata

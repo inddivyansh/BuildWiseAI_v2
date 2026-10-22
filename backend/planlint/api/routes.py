@@ -114,29 +114,6 @@ async def replace_project(
     return await update_project(project_id, body, request, user=user)
 
 
-@router.post("/projects/sample", status_code=201)
-async def create_sample_project(
-    request: Request,
-    user: AuthenticatedUser = Depends(get_current_user),
-):
-    """Bundled sample: vector floor plan + ADA Standards excerpt owned by caller."""
-    samples = Path(settings.planlint_samples_dir)
-    plan = samples / "sample_floorplan.pdf"
-    code = samples / "ada_excerpt.pdf"
-    if not plan.exists() or not code.exists():
-        raise HTTPException(500, "Sample PDFs missing — run the generators in samples/")
-    repo = _repo(request)
-    project_id = f"proj-{uuid.uuid4().hex[:10]}"
-    await repo.create_project(project_id, "Sample: ADA door clearance audit", user_id=user.id)
-    for source, kind in ((plan, "floorplan"), (code, "codebook")):
-        document_id = f"doc-{uuid.uuid4().hex[:10]}"
-        destination = Path(settings.planlint_data_dir) / project_id / source.name
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy(source, destination)
-        await repo.create_document(
-            document_id, project_id, kind, source.name, str(destination), user_id=user.id
-        )
-    return {"id": project_id}
 
 
 @router.delete("/projects/{project_id}", status_code=204)

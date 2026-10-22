@@ -24,6 +24,7 @@ from pydantic_ai import Agent, BinaryContent, ModelRetry, RunContext
 
 from planlint.ingest.vlm import RENDER_ZOOM
 from planlint.models import AssetType, BBox, Parameter, PhysicalAsset
+from planlint.retry import run_agent_with_retry
 
 # Sane inch ranges for a real stair (mirrors rule_extractor's constraint
 # bounds): a cited value outside these is a misread, not a dimension.
@@ -156,7 +157,8 @@ async def detect_elevation_page(image_png: bytes, text_layer: str, model) -> lis
     layer — nothing is estimated."""
     img_width, img_height = struct.unpack(">II", image_png[16:24])
     agent = build_elevation_agent(model)
-    result = await agent.run(
+    result = await run_agent_with_retry(
+        agent,
         [
             "Read the printed stair dimensions on this elevation/section page.",
             BinaryContent(data=image_png, media_type="image/png"),

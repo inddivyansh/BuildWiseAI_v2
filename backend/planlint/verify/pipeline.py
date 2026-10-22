@@ -263,5 +263,17 @@ async def run_full(
         )
         return summary
     except Exception as error:
-        await emit(RunEvent(stage="error", message=str(error), level="error"))
-        raise
+        err_str = str(error).lower()
+        if "429" in err_str or "quota" in err_str or "resource_exhausted" in err_str or "rate limit" in err_str:
+            friendly_msg = "Gemini API quota exceeded or rate limit reached (429). Please wait a moment before retrying or check your Google Gemini quota."
+        elif "503" in err_str or "unavailable" in err_str or "high demand" in err_str or "spikes in demand" in err_str:
+            friendly_msg = "Gemini model is currently experiencing high demand / unavailable (503). Spikes in demand are usually temporary. Please retry in a few moments."
+        elif "401" in err_str or "403" in err_str or "unauthenticated" in err_str or "api key" in err_str:
+            friendly_msg = "Gemini authentication failed (401/403). Please verify GEMINI_API_KEY in your .env file."
+        elif "timeout" in err_str or "timed out" in err_str:
+            friendly_msg = "Gemini API request timed out. The model was unresponsive. Please retry."
+        else:
+            friendly_msg = f"Verification failed: {str(error)}"
+
+        await emit(RunEvent(stage="error", message=friendly_msg, level="error"))
+        raise RuntimeError(friendly_msg) from error

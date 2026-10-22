@@ -17,6 +17,11 @@ from app.services.geometry.adjacency import (
     build_adjacency_graph,
     validate_adjacency_constraints,
 )
+from app.services.geometry.spatial_validator import (
+    BlueprintType,
+    DynamicSpatialValidator,
+    detect_blueprint_type,
+)
 
 __all__ = [
     "cleanup_pipeline",
@@ -32,4 +37,7 @@ __all__ = [
     "split_polygon_vertical",
     "build_adjacency_graph",
     "validate_adjacency_constraints",
+    "BlueprintType",
+    "DynamicSpatialValidator",
+    "detect_blueprint_type",
 ]

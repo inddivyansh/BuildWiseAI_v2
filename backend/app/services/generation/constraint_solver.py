@@ -208,6 +208,8 @@ def _optimize_adjacency(
 ) -> list[RoomSlot]:
     """
     Optimize room placement by swapping rooms to improve adjacency satisfaction.
+    Only allows swapping slots of similar target area (within 35%) so that
+    functional proportions (e.g. Living room vs Bathroom) are never corrupted.
     Uses simulated annealing-style random swaps.
     """
     if len(slots) <= 2:
@@ -219,11 +221,19 @@ def _optimize_adjacency(
     rng = random.Random(42)
 
     for i in range(iterations):
-        # Pick two random slots and swap their positions
+        # Pick two random slots
         a, b = rng.sample(range(len(best_slots)), 2)
+
+        # Spatial sanity guard: Never swap slots between rooms with disproportionate target areas!
+        # (e.g. Swapping a 20m² living room with a 5m² bathroom causes severe distortion)
+        area_a = best_slots[a].room.target_area_sqm
+        area_b = best_slots[b].room.target_area_sqm
+        if max(area_a, area_b) / max(min(area_a, area_b), 0.1) > 1.35:
+            continue
+
         trial = list(best_slots)
 
-        # Swap positions but keep room assignments
+        # Swap positions between compatible rooms
         trial[a] = RoomSlot(
             room_idx=best_slots[a].room_idx,
             room=best_slots[a].room,
@@ -252,13 +262,21 @@ def _adjacency_score(
     adj_map: dict[str, list[tuple[str, str]]],
 ) -> float:
     """
-    Score how well slots satisfy adjacency constraints.
-    Higher = better. +10 for each satisfied adjacent, -5 for violated separated.
+    Score how well slots satisfy adjacency constraints while maintaining area fidelity.
+    Higher = better. +10 for each satisfied adjacent, -5 for violated separated,
+    heavy penalty for deviating from target room area.
     """
     id_to_slot = {s.room.id: s for s in slots}
     score = 0.0
 
     for slot in slots:
+        # Area fidelity: penalize slots that stray from target room area
+        target = slot.room.target_area_sqm
+        if target > 0:
+            deviation = abs(slot.area - target) / target
+            if deviation > 0.15:
+                score -= deviation * 25.0
+
         for neighbor_id, rel in adj_map.get(slot.room.id, []):
             if neighbor_id not in id_to_slot:
                 continue

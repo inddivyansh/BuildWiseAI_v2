@@ -50,8 +50,16 @@ class LLMClient:
         }
         effective_model = MODEL_UPGRADE_MAP.get(self.model, self.model)
 
-        # Extract pure model name for endpoint (e.g. "ollama:qwen2.5" -> "qwen2.5")
-        if effective_model.startswith("ollama:"):
+        # Extract pure model name for endpoint
+        if self.provider == "ollama":
+            raw_model = self.model.replace("ollama:", "")
+            if "gemma" in raw_model.lower():
+                self.model_call_name = "gemma4:e4b"
+            elif "qwen" in raw_model.lower():
+                self.model_call_name = "qwen2.5"
+            else:
+                self.model_call_name = raw_model
+        elif effective_model.startswith("ollama:"):
             self.model_call_name = effective_model.split(":", 1)[1]
         else:
             self.model_call_name = effective_model
@@ -111,9 +119,14 @@ class LLMClient:
             resolved_key = "not-needed"
 
         self.base_url = api_base
+        extra_headers = {}
+        if self.provider == "anthropic":
+            extra_headers["anthropic-version"] = "2023-06-01"
+
         self._client = AsyncOpenAI(
             base_url=api_base,
             api_key=resolved_key,
+            default_headers=extra_headers if extra_headers else None,
         )
 
         logger.info(
@@ -137,6 +150,21 @@ class LLMClient:
         enforces JSON output, and validates against the Pydantic schema.
         """
         user_message = prompt
+
+        # Detect explicit target area in prompt (e.g. "72m²", "72 sqm", "120 square meters")
+        import re
+        area_match = re.search(r"(\d+(\.\d+)?)\s*(sqm|m2|m²|square meters?)", prompt, re.IGNORECASE)
+        if area_match:
+            try:
+                target_sqm = float(area_match.group(1))
+                user_message += (
+                    f"\n\nCRITICAL AREA CONSTRAINT: Total requested blueprint area is {target_sqm:.1f} m²."
+                    f"\nThe sum of ALL room target_area_sqm values MUST equal approximately {target_sqm:.1f} m²."
+                    f"\nAllocate space proportionally with architectural common sense: core primary spaces must be largest,"
+                    f" and secondary/sanitary spaces (e.g. bathrooms) must remain compact and proportional (never oversized)."
+                )
+            except ValueError:
+                pass
 
         if plot_width_m and plot_depth_m:
             # Compute and inject actual budget so the LLM can't ignore it
@@ -241,6 +269,102 @@ class LLMClient:
 
         logger.debug("llm_request", provider=self.provider, model=target_model)
 
+        if self.provider == "gemini":
+            # Pool of Google AI Studio free tier models ordered for optimal rate-limit tolerance
+            gemini_pool = [
+                "gemini-3.5-flash-lite",
+                "gemini-3.5-flash",
+                "gemini-3.8-flash",
+                "gemini-3.7-flash",
+                "gemini-3.6-flash",
+                "gemini-flash-latest",
+                "gemini-flash-lite-latest",
+                "gemini-2.5-flash",
+            ]
+            if target_model and target_model in gemini_pool:
+                candidates = [target_model] + [m for m in gemini_pool if m != target_model]
+            else:
+                candidates = list(gemini_pool)
+
+            last_exc = None
+            for idx, candidate in enumerate(candidates):
+                kwargs["model"] = candidate
+                logger.info("gemini_inference_attempt", model=candidate, attempt=idx + 1, total=len(candidates))
+                try:
+                    response = await self._client.chat.completions.create(**kwargs)
+                    content = response.choices[0].message.content
+                    if not content:
+                        raise ValueError(f"Empty response received from Gemini ({candidate})")
+                    logger.info("gemini_inference_success", model=candidate)
+                    return self._extract_json(content)
+                except Exception as exc:
+                    err_str = str(exc)
+                    last_exc = exc
+                    status_code = getattr(exc, "status_code", None) or getattr(getattr(exc, "response", None), "status_code", None)
+                    is_rate_limit = (
+                        status_code == 429
+                        or "429" in err_str
+                        or "quota" in err_str.lower()
+                        or "rate limit" in err_str.lower()
+                        or "resource_exhausted" in err_str.lower()
+                        or "RateLimitError" in type(exc).__name__
+                    )
+                    is_transient = (
+                        is_rate_limit
+                        or status_code in (503, 502, 504, 404)
+                        or "503" in err_str
+                        or "404" in err_str
+                        or "unavailable" in err_str.lower()
+                        or "high demand" in err_str.lower()
+                        or "spikes in demand" in err_str.lower()
+                        or "not found" in err_str.lower()
+                        or "timeout" in err_str.lower()
+                    )
+                    if is_transient and idx < len(candidates) - 1:
+                        next_model = candidates[idx + 1]
+                        logger.warning(
+                            "gemini_model_quota_exceeded_auto_shifting",
+                            exhausted_model=candidate,
+                            next_model=next_model,
+                            is_rate_limit=is_rate_limit,
+                            error=err_str[:120],
+                        )
+                        if is_rate_limit:
+                            # On 429 / quota limit, Gemini free tier enforces a per-minute limit (RPM).
+                            # We MUST wait ~60s before calling the next model so the rate limit window
+                            # resets, otherwise all models in the pool will fail instantly back-to-back.
+                            import asyncio as _asyncio
+                            logger.info(
+                                "gemini_429_waiting_60s_rpm_reset",
+                                exhausted_model=candidate,
+                                next_model=next_model,
+                                wait_seconds=60,
+                            )
+                            await _asyncio.sleep(60.0)
+                        elif "503" in err_str or status_code == 503:
+                            import asyncio as _asyncio
+                            await _asyncio.sleep(3.0)
+                        continue
+                    break
+
+            err_str = str(last_exc)
+            status_code = getattr(last_exc, "status_code", None) or getattr(getattr(last_exc, "response", None), "status_code", None)
+            if status_code == 429 or "429" in err_str or "rate limit" in err_str.lower() or "quota" in err_str.lower() or "resource_exhausted" in err_str.lower():
+                raise RuntimeError(
+                    f"All Google Gemini models reached their quota / rate limits ({len(candidates)} models tried with backoff). "
+                    "Please wait a minute or switch to a local Ollama model (Qwen 2.5 / Gemma)."
+                ) from last_exc
+            if status_code == 503 or "503" in err_str or "unavailable" in err_str.lower() or "high demand" in err_str.lower():
+                raise RuntimeError(
+                    "Google Gemini is currently experiencing temporary high demand across all models (503). "
+                    "Please retry shortly or use your offline local model."
+                ) from last_exc
+            if status_code == 401 or "401" in err_str or "auth" in err_str.lower() or "api key" in err_str.lower():
+                raise RuntimeError(
+                    "Google Gemini authentication failed (401). Please verify GEMINI_API_KEY in your .env file."
+                ) from last_exc
+            raise RuntimeError(f"Google Gemini inference failed: {err_str[:200]}") from last_exc
+
         try:
             response = await self._client.chat.completions.create(**kwargs)
         except Exception as exc:
@@ -248,16 +372,17 @@ class LLMClient:
             logger.error("llm_call_failed", provider=self.provider, model=target_model, error=err_str)
             if "429" in err_str or "rate limit" in err_str.lower() or "quota" in err_str.lower():
                 raise RuntimeError(
-                    f"Free-tier rate limit or quota exceeded for {self.provider} ({target_model}). "
-                    "Please wait a moment before trying again, or select another free-tier model."
+                    f"AI model quota exceeded or rate limit reached (429) for {self.provider} ({target_model}). "
+                    "Please wait a few moments before retrying."
                 ) from exc
-            if "401" in err_str or "auth" in err_str.lower() or "api key" in err_str.lower():
+            if "503" in err_str or "unavailable" in err_str.lower() or "high demand" in err_str.lower():
                 raise RuntimeError(
-                    f"Authentication failed for {self.provider}. Please verify that the API key is configured correctly."
+                    f"AI model ({target_model}) is currently experiencing high demand / unavailable (503). "
+                    "Please try again in a few moments."
                 ) from exc
             if "timeout" in err_str.lower() or "connection" in err_str.lower():
                 raise RuntimeError(
-                    f"Connection to {self.provider} timed out. Please check your network connection or try another model."
+                    f"Connection to {self.provider} timed out. The model was unresponsive. Please retry."
                 ) from exc
             raise RuntimeError(
                 f"AI model inference failed on {self.provider} ({target_model}): {err_str[:200]}"
@@ -308,30 +433,48 @@ class LLMClient:
 
         raise ValueError(f"Could not extract JSON from LLM response: {text[:200]}")
 
-    # Maps human-readable room names → our enum values
+    # Maps human-readable room names → our enum values across all blueprint types
     _ROOM_TYPE_MAP = {
-        "living room": "living", "living": "living",
-        "kitchen": "kitchen",
-        "dining room": "dining", "dining": "dining",
-        "bedroom": "bedroom", "bed": "bedroom",
-        "bathroom": "bathroom", "bath": "bathroom",
+        # Residential
+        "living room": "living", "living": "living", "family room": "living", "salon": "living",
+        "kitchen": "kitchen", "kitchenette": "kitchen", "cuisine": "kitchen",
+        "dining room": "dining", "dining": "dining", "salle à manger": "dining",
+        "bedroom": "bedroom", "bed": "bedroom", "chambre": "bedroom", "guest bedroom": "bedroom",
+        "bathroom": "bathroom", "bath": "bathroom", "restroom": "bathroom", "washroom": "bathroom", "wc": "half_bath",
         "half bath": "half_bath", "half bathroom": "half_bath", "powder room": "half_bath",
         "master bedroom": "master_bedroom", "master bed": "master_bedroom", "primary bedroom": "master_bedroom",
         "master bathroom": "master_bathroom", "master bath": "master_bathroom", "ensuite": "master_bathroom",
-        "office": "office", "study": "office", "home office": "office",
-        "laundry": "laundry", "laundry room": "laundry",
+        "office": "office", "study": "office", "home office": "office", "bureau": "office",
+        "laundry": "laundry", "laundry room": "laundry", "buanderie": "laundry",
         "garage": "garage", "double garage": "garage",
-        "hallway": "hallway", "hall": "hallway", "corridor": "hallway",
+        "hallway": "hallway", "hall": "hallway", "corridor": "hallway", "circulation": "hallway",
         "closet": "closet",
         "walk-in closet": "walkin_closet", "walkin closet": "walkin_closet", "walk in closet": "walkin_closet",
         "pantry": "pantry",
         "mudroom": "mudroom", "mud room": "mudroom",
-        "foyer": "foyer", "entry": "foyer", "entryway": "foyer", "entrance": "foyer",
+        "foyer": "foyer", "entry": "foyer", "entryway": "foyer", "entrance": "foyer", "lobby": "foyer",
         "staircase": "staircase", "stairs": "staircase",
         "storage": "storage", "storage room": "storage",
         "balcony": "balcony",
         "porch": "porch", "front porch": "porch",
-        "utility": "utility", "utility room": "utility",
+        "utility": "utility", "utility room": "utility", "mechanical": "utility",
+        # Commercial & Retail
+        "sales floor": "other", "retail floor": "other", "showroom": "other", "boutique": "other",
+        "checkout": "foyer", "customer area": "other", "stockroom": "storage", "inventory": "storage",
+        # Workplace & Office
+        "open office": "office", "workstation": "office", "workspace": "office",
+        "conference room": "office", "meeting room": "office", "boardroom": "office", "huddle room": "office",
+        "reception": "foyer", "breakroom": "kitchen", "server room": "utility", "it closet": "utility",
+        # Industrial & Warehouse
+        "warehouse bay": "storage", "storage bay": "storage", "loading dock": "utility",
+        "staging area": "utility", "production floor": "other", "workshop": "other", "control room": "office",
+        # Healthcare & Medical
+        "exam room": "office", "examination room": "office", "consultation room": "office",
+        "triage": "foyer", "waiting room": "foyer", "waiting area": "foyer",
+        "procedure room": "other", "treatment room": "other", "pharmacy": "storage",
+        # Educational & Institutional
+        "classroom": "other", "lecture hall": "other", "lab": "other", "laboratory": "other",
+        "library": "other", "faculty office": "office", "staff room": "office",
     }
 
     def _coerce_spec(
@@ -576,13 +719,13 @@ class LLMClient:
         if area is None:
             # Use defaults based on type
             area = {
-                "living": 25, "kitchen": 12, "dining": 14,
-                "bedroom": 12, "bathroom": 5, "half_bath": 3,
-                "master_bedroom": 18, "master_bathroom": 8,
-                "office": 10, "laundry": 5, "garage": 18,
-                "hallway": 8, "closet": 3, "walkin_closet": 5,
-                "pantry": 3, "mudroom": 5, "foyer": 6,
-                "staircase": 5, "storage": 4,
+                "living": 24, "kitchen": 10, "dining": 12,
+                "bedroom": 11, "bathroom": 4.5, "half_bath": 2.2,
+                "master_bedroom": 16, "master_bathroom": 5.5,
+                "office": 12, "laundry": 4.5, "garage": 18,
+                "hallway": 6, "closet": 3, "walkin_closet": 4.5,
+                "pantry": 3, "mudroom": 4.5, "foyer": 5,
+                "staircase": 5, "storage": 6, "utility": 6, "other": 15,
             }.get(resolved_type, 10)
 
         try:
@@ -631,32 +774,92 @@ class LLMClient:
             return [self._normalize_keys(item) for item in obj]
         return obj
 
-    async def health_check(self) -> bool:
-        """Check if the LLM server is reachable and the model is available."""
+    async def verify_availability(self) -> tuple[bool, str | None]:
+        """Check if the LLM server is reachable and responsive, returning (is_ok, error_detail)."""
         target_model = getattr(self, "model_call_name", self.model)
         try:
-            if self.provider in ("gemini", "groq", "xai"):
-                # Test minimal completion to verify API key and endpoint validity
+            if self.provider == "gemini":
+                # For Gemini, verify the API key is present without burning precious RPM/RPD quotas with throwaway probes.
+                # Auto-shifting across the candidate Gemini model pool is handled dynamically during inference in _chat_json.
+                api_key = (
+                    getattr(settings, "gemini_api_key", "")
+                    or getattr(settings, "google_api_key", "")
+                    or os.environ.get("GEMINI_API_KEY")
+                    or os.environ.get("GOOGLE_API_KEY")
+                )
+                if not api_key or api_key == "not-needed" or api_key.startswith("your-"):
+                    return False, "GEMINI_API_KEY is not configured in .env."
+                return True, None
+
+            if self.provider in ("groq", "xai", "openai", "anthropic"):
                 response = await self._client.chat.completions.create(
                     model=target_model,
                     messages=[{"role": "user", "content": "hi"}],
                     max_tokens=5,
                 )
-                return response.choices[0].message.content is not None
+                if response.choices and response.choices[0].message.content is not None:
+                    return True, None
+                return False, f"Model {target_model} on {self.provider} returned an empty response."
 
             models = await self._client.models.list()
             model_ids = [m.id for m in models.data]
             if target_model in model_ids or self.model in model_ids:
-                return True
-            base_name = target_model.split(":")[0]
-            if any(base_name in mid for mid in model_ids):
-                return True
-            logger.warning(
-                "llm_model_not_found",
-                model=target_model,
-                available=model_ids[:10],
+                return True, None
+            matched = next(
+                (
+                    mid for mid in model_ids
+                    if target_model.lower() in mid.lower()
+                    or any(p in mid.lower() for p in target_model.lower().split(":"))
+                    or ("gemma" in target_model.lower() and "gemma" in mid.lower())
+                    or ("qwen" in target_model.lower() and "qwen" in mid.lower())
+                ),
+                None,
             )
-            return False
+            if matched:
+                self.model_call_name = matched
+                return True, None
+            return False, f"Model '{target_model}' not found in local Ollama. Installed: {', '.join(model_ids) if model_ids else 'None'}."
         except Exception as e:
-            logger.warning("llm_health_check_failed", provider=self.provider, model=target_model, error=str(e))
-            return False
+            err_str = str(e)
+            logger.warning("llm_health_check_failed", provider=self.provider, model=target_model, error=err_str)
+            if self.provider == "ollama":
+                if "connection error" in err_str.lower() or "connect" in err_str.lower() or "refused" in err_str.lower() or "11434" in err_str:
+                    msg = f"Ollama is not running locally. Please start Ollama (`ollama serve`) on your machine."
+                elif "not found" in err_str.lower() or "404" in err_str:
+                    msg = f"Ollama model '{target_model}' not found. Please run: ollama pull {target_model}"
+                else:
+                    msg = f"Local Ollama error: {err_str[:120]}"
+                return False, msg
+
+            provider_name = (
+                "Google Gemini" if self.provider == "gemini"
+                else "Groq" if self.provider == "groq"
+                else "Anthropic" if self.provider == "anthropic"
+                else "OpenAI" if self.provider == "openai"
+                else "xAI" if self.provider == "xai"
+                else self.provider.upper()
+            )
+            key_name = (
+                "GEMINI_API_KEY" if self.provider == "gemini"
+                else "GROQ_API_KEY" if self.provider == "groq"
+                else "OPENAI_API_KEY" if self.provider == "openai"
+                else "ANTHROPIC_API_KEY" if self.provider == "anthropic"
+                else "XAI_API_KEY" if self.provider == "xai"
+                else f"{self.provider.upper()}_API_KEY"
+            )
+            if "429" in err_str or "quota" in err_str.lower() or "rate limit" in err_str.lower() or "resource_exhausted" in err_str.lower():
+                msg = f"{provider_name} API quota exceeded or rate limit reached (429) for model '{target_model}'. Please wait before retrying or check your {provider_name} quota."
+            elif "503" in err_str or "unavailable" in err_str.lower() or "high demand" in err_str.lower() or "spikes in demand" in err_str.lower():
+                msg = f"{provider_name} model '{target_model}' is currently experiencing high demand / unavailable (503). Please try again in a few moments."
+            elif "401" in err_str or "403" in err_str or "auth" in err_str.lower() or "api key" in err_str.lower():
+                msg = f"{provider_name} authentication failed (401/403). Please verify {key_name} in .env."
+            elif "timeout" in err_str.lower() or "timed out" in err_str.lower():
+                msg = f"{provider_name} connection timed out. The model was unresponsive. Please retry."
+            else:
+                msg = f"Failed to connect to {provider_name} ({target_model}): {err_str[:150]}"
+            return False, msg
+
+    async def health_check(self) -> bool:
+        """Check if the LLM server is reachable and the model is available."""
+        ok, _ = await self.verify_availability()
+        return ok

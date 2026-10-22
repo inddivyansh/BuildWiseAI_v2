@@ -12,7 +12,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
 
-  const isPublicRoute = PUBLIC_ROUTES.includes(pathname);
+  const isPublicRoute = pathname ? PUBLIC_ROUTES.includes(pathname) : false;
 
   useEffect(() => {
     if (loading) return;
@@ -29,7 +29,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     }
   }, [user, loading, isPublicRoute, pathname, router]);
 
-  if (loading) {
+  if (loading && !isPublicRoute) {
     return (
       <div className="min-h-screen w-full bg-surface-0 flex flex-col items-center justify-center gap-4 text-ink">
         <div className="w-12 h-12 rounded-xl bg-accent/20 border border-accent/40 flex items-center justify-center text-accent animate-pulse">

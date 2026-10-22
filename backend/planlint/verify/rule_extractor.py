@@ -9,11 +9,19 @@ can enter the pipeline.
 
 from __future__ import annotations
 
+import asyncio
+
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent, ModelRetry
 
 from planlint.models import AssetType, Constraint, Operator, Parameter
+from planlint.retry import run_agent_with_retry
 from planlint.verify.checker import to_inches, to_square_metres
+
+# Gemini free tier: 5 RPM (requests per minute). Serialise all clause-extraction
+# calls and add a 13 s cooldown between them to avoid 429 quota bursts.
+_EXTRACT_SEM = asyncio.Semaphore(1)
+_EXTRACT_DELAY_S = 13.0  # seconds between sequential constraint-extraction calls
 
 # Plausibility ranges in inches for length-like parameters. A value outside
 # its range is as wrong as a negative one — force the model to re-read.
@@ -155,7 +163,11 @@ async def extract_constraints(
     model,
 ) -> list[Constraint]:
     """Extract constraints for one clause. `clause`/`ancestors` are graph dicts
-    with clause_id / title / text keys."""
+    with clause_id / title / text keys.
+
+    Serialised via _EXTRACT_SEM so we never fire parallel Gemini requests
+    during a compliance run (avoids 429 rate-limit bursts on the free tier).
+    """
     agent = build_extractor_agent(model)
     breadcrumb = "\n".join(
         f"{'  ' * i}{a.get('clause_id', '')} {a.get('title') or a.get('text', '')[:80]}"
@@ -165,7 +177,11 @@ async def extract_constraints(
         f"Ancestral chain (scope context):\n{breadcrumb or '(none)'}\n\n"
         f"Target clause {clause.get('clause_id', '')}:\n{clause['text']}"
     )
-    result = await agent.run(prompt)
+    async with _EXTRACT_SEM:
+        result = await run_agent_with_retry(agent, prompt)
+        # Pause after each call so the next clause doesn't immediately exhaust
+        # the per-minute quota on Gemini's free tier (5 RPM).
+        await asyncio.sleep(_EXTRACT_DELAY_S)
     return [
         Constraint(regulation_id=clause["id"], **draft.model_dump())
         for draft in result.output.constraints

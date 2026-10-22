@@ -85,7 +85,7 @@ async def edit_floor_plan(
     Edit an existing floor plan.
 
     If structured `actions` are provided, applies them deterministically.
-    If only a `prompt` is given and no plan exists, falls back to mock generation.
+    If a natural language `prompt` is given, parses it using the validated LLM provider.
 
     The edited blueprint is persisted to Neo4j if the source blueprint was
     previously persisted (i.e. had a project_id).

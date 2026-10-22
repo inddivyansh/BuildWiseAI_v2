@@ -61,13 +61,28 @@ function SignUpForm() {
     }
   }
 
-  function handleQuickDemo() {
+  async function handleQuickDemo() {
     const demoId = Math.floor(100 + Math.random() * 900);
-    setEmail(`architect${demoId}@buildwise.ai`);
+    const demoEmail = `architect${demoId}@buildwise.ai`;
+    setEmail(demoEmail);
     setPassword("DemoPassword123!");
     setConfirmPassword("DemoPassword123!");
     setError(null);
+    setLoading(true);
+    try {
+      await signUp(demoEmail, "DemoPassword123!");
+      toast.success("Demo account created!");
+      router.replace(redirectPath);
+    } catch (err: any) {
+      const msg = err.message || "Failed to create demo account.";
+      setError(msg);
+      toast.error(msg);
+    } finally {
+      setLoading(false);
+    }
   }
+
+
 
   return (
     <div className="min-h-screen w-full bg-surface-0 flex flex-col justify-center items-center px-4 sm:px-6 lg:px-8 relative overflow-hidden">
@@ -197,16 +212,20 @@ function SignUpForm() {
 
           {/* Quick Demo Helper */}
           <div className="mt-5 pt-4 border-t border-edge flex items-center justify-between">
-            <span className="text-[11px] text-ink-dim">Testing locally?</span>
+            <div>
+              <span className="text-[11px] font-medium text-ink">Testing Locally?</span>
+              <p className="text-[10px] text-ink-dim">Instant test account</p>
+            </div>
             <Button
               type="button"
               variant="outline"
               size="sm"
               onClick={handleQuickDemo}
-              className="text-xs h-7 border-edge hover:bg-surface-2 text-ink flex items-center gap-1.5"
+              disabled={loading}
+              className="text-xs h-7 border-edge hover:bg-surface-2 text-ink flex items-center gap-1.5 cursor-pointer"
             >
               <Sparkles size={13} className="text-accent" />
-              Fill Demo Info
+              1-Click Demo Account
             </Button>
           </div>
         </Card>

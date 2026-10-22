@@ -90,18 +90,7 @@ export default function UnifiedDashboard() {
     }
   }
 
-  async function handleLoadSample() {
-    setBusyAction("sample");
-    try {
-      const sample = await api.createSampleProject();
-      toast.success("Loaded bundled ADA door clearance sample");
-      router.push(`/project/${sample.id}`);
-    } catch (e: any) {
-      toast.error(e.message || "Failed to load sample project");
-    } finally {
-      setBusyAction(null);
-    }
-  }
+
 
   function handleQuickGenerate(e: React.FormEvent) {
     e.preventDefault();
@@ -186,15 +175,6 @@ export default function UnifiedDashboard() {
               >
                 Start New Audit
                 <ArrowRight size={14} className="ml-1.5" />
-              </Button>
-              <Button
-                variant="outline"
-                onClick={handleLoadSample}
-                disabled={busyAction === "sample"}
-                className="border-edge bg-surface-2 text-ink hover:bg-surface-2/80 text-xs h-9 px-3"
-              >
-                <Building size={14} className="mr-1.5 text-pass" />
-                {busyAction === "sample" ? "Loading Sample..." : "Explore ADA Sample"}
               </Button>
             </div>
           </Card>
