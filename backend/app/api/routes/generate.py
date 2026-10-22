@@ -100,8 +100,11 @@ async def generate_floor_plan(
         provider=validated_provider,
     )
 
-    if result.get("errors"):
-        first_error = result["errors"][0]
+    floor_plan = result.get("floor_plan")
+    compliance = result.get("compliance")
+
+    if floor_plan is None:
+        first_error = (result.get("errors") or ["Failed to generate floor plan from prompt. Please rephrase or try another model."])[0]
         err_lower = first_error.lower()
         status_code = (
             429 if ("429" in err_lower or "quota" in err_lower)
@@ -109,15 +112,6 @@ async def generate_floor_plan(
             else 500
         )
         raise HTTPException(status_code=status_code, detail=first_error)
-
-    floor_plan = result.get("floor_plan")
-    compliance = result.get("compliance")
-
-    if floor_plan is None:
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to generate floor plan from prompt. Please rephrase or try another model.",
-        )
 
     # Always put into in-process store with user/project ownership metadata
     plan_store.put(floor_plan, user_id=user.id, project_id=request_body.project_id)
@@ -130,12 +124,16 @@ async def generate_floor_plan(
         )
         persisted_project_id = request_body.project_id
 
+    # If there were non-fatal adjustment notices (e.g. area budget scaling), surface them in error/warning field
+    notice_msg = "; ".join(result["errors"]) if result.get("errors") else None
+
     return GenerateResponse(
         generation_id=floor_plan.generation_id,
         status="completed",
         floor_plan=floor_plan,
         parsed_spec=floor_plan.spec,
         compliance=compliance,
+        error=notice_msg,
         project_id=persisted_project_id,
     )
 

@@ -147,34 +147,65 @@ class LLMComplianceInterpreter:
             existing_violations=existing_text,
         )
 
-        # 5. Call Gemini
-        try:
-            resp = await self._client.chat.completions.create(
-                model=self._model,
-                messages=[
-                    {"role": "system", "content": _SYSTEM_PROMPT},
-                    {"role": "user", "content": user_prompt},
-                ],
-                temperature=0.2,
-                max_tokens=2000,
-            )
-            content = resp.choices[0].message.content.strip()
+        # 5. Call Gemini with multi-model failover pool
+        candidate_models = [
+            "gemini-3.5-flash-lite",
+            "gemini-3.5-flash",
+            "gemini-3.8-flash",
+            "gemini-3.7-flash",
+            "gemini-flash-latest",
+        ]
+        if self._model and self._model in candidate_models:
+            candidates = [self._model] + [m for m in candidate_models if m != self._model]
+        else:
+            candidates = candidate_models
 
-            # Strip markdown fences if present
-            if content.startswith("```"):
-                content = content.split("\n", 1)[1]
-                if content.endswith("```"):
-                    content = content[:-3]
+        for idx, candidate in enumerate(candidates):
+            try:
+                resp = await self._client.chat.completions.create(
+                    model=candidate,
+                    messages=[
+                        {"role": "system", "content": _SYSTEM_PROMPT},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                    temperature=0.2,
+                    max_tokens=2000,
+                )
+                content = resp.choices[0].message.content.strip()
 
-            data = json.loads(content)
-            return self._parse_violations(data)
+                # Strip markdown fences if present
+                if content.startswith("```"):
+                    content = content.split("\n", 1)[1]
+                    if content.endswith("```"):
+                        content = content[:-3]
 
-        except json.JSONDecodeError as e:
-            logger.warning("llm_compliance_json_parse_failed", error=str(e))
-            return []
-        except Exception as e:
-            logger.warning("llm_compliance_failed", error=str(e))
-            return []
+                data = json.loads(content)
+                return self._parse_violations(data)
+
+            except json.JSONDecodeError as e:
+                logger.warning("llm_compliance_json_parse_failed", model=candidate, error=str(e))
+                return []
+            except Exception as e:
+                err_str = str(e)
+                status_code = getattr(e, "status_code", None)
+                is_rate_limit = (
+                    status_code == 429
+                    or "429" in err_str
+                    or "quota" in err_str.lower()
+                    or "rate limit" in err_str.lower()
+                    or "resource_exhausted" in err_str.lower()
+                )
+                if is_rate_limit and idx < len(candidates) - 1:
+                    logger.warning(
+                        "llm_compliance_model_quota_shifting",
+                        exhausted_model=candidate,
+                        next_model=candidates[idx + 1],
+                    )
+                    continue
+                logger.warning("llm_compliance_failed", model=candidate, error=err_str[:120])
+                break
+
+        return []
 
     async def _get_relevant_clauses(
         self, plan: GeneratedFloorPlan, zone_id: str | None

@@ -114,7 +114,12 @@ class GraphRepository:
                 m.is_mandatory = coalesce(m.is_mandatory, true),
                 m.rationale = coalesce(m.rationale, 'schema'),
                 m.parent_clause_id = coalesce(m.parent_clause_id, 'schema'),
-                m.source_asset_id = coalesce(m.source_asset_id, 'schema')
+                m.source_asset_id = coalesce(m.source_asset_id, 'schema'),
+                m.term = coalesce(m.term, 'schema'),
+                m.jurisdiction = coalesce(m.jurisdiction, 'schema'),
+                m.source_file = coalesce(m.source_file, 'schema'),
+                m.chapter = coalesce(m.chapter, 'schema'),
+                m.level = coalesce(m.level, 'schema')
             MERGE (m)-[:SPECIFIED_BY]->(m)
             MERGE (m)-[:HAS_DETAIL]->(m)
             MERGE (m)-[:HAS_SHEET]->(m)
@@ -125,6 +130,26 @@ class GraphRepository:
             MERGE (m)-[:HAS_SPEC]->(m)
             MERGE (m)-[:HAS_DOCUMENT]->(m)
             MERGE (m)-[:HAS_BLUEPRINT]->(m)
+
+            // Register ArchiGen compliance graph ontology
+            MERGE (d:Definition {id: '_schema_definition_seed'})
+            SET d.term = coalesce(d.term, '_schema_term'),
+                d.text = coalesce(d.text, '_schema_text'),
+                d.jurisdiction = coalesce(d.jurisdiction, '_schema_jur')
+            MERGE (cl:Clause {id: '_schema_clause_seed'})
+            SET cl.text = coalesce(cl.text, '_schema_text'),
+                cl.title = coalesce(cl.title, '_schema_title'),
+                cl.jurisdiction = coalesce(cl.jurisdiction, '_schema_jur')
+            MERGE (z:Zone {id: '_schema_zone_seed'})
+            MERGE (zs:ZoneSpec {id: '_schema_zonespec_seed'})
+            MERGE (tp:Topic {name: '_schema_topic_seed'})
+            MERGE (j:Jurisdiction {name: '_schema_jur_seed'})
+            MERGE (z)-[:HAS_SPEC]->(zs)
+            MERGE (zs)-[:REFERENCES_ARTICLE]->(cl)
+            MERGE (cl)-[:REFERENCES]->(cl)
+            MERGE (cl)-[:COVERS_TOPIC]->(tp)
+            MERGE (cl)-[:BELONGS_TO]->(j)
+            MERGE (j)-[:CHILD_OF]->(j)
             """
         )
 
