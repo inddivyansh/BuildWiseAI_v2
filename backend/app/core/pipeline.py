@@ -205,9 +205,17 @@ class GenerationPipeline:
         zone_id: str | None = None,
         model: str | None = None,
         provider: str | None = None,
+        generation_mode: str = "rules",
+        compliance_mode: str = "rules",
     ) -> dict:
         """
         Full pipeline: NL prompt → GeneratedFloorPlan.
+
+        Supports:
+            generation_mode: 'rules' (deterministic 100% offline rule-based parser)
+                             or 'llm' (Gemini/Ollama natural language parsing)
+            compliance_mode: 'rules' (pure deterministic geometry & zoning checks)
+                             or 'llm' (Tier 3 LLM interpretation)
 
         Returns dict with keys:
             generation_id, floor_plan, errors, timing
@@ -216,34 +224,61 @@ class GenerationPipeline:
         timing = {}
         errors = []
 
-        # --- Layer 1: LLM Parsing ---
+        # --- Layer 1: Specification Parsing (Rules vs. LLM) ---
         t0 = time.time()
-        try:
-            from app.services.llm.providers import validate_model_selection
-            validated_provider, validated_model = validate_model_selection(model, provider)
-            llm_client = LLMClient(provider=validated_provider, model=validated_model)
-            spec = await llm_client.parse_nl_to_spec(
-                prompt, plot_width_m, plot_depth_m, locale
-            )
-            timing["llm_parse_s"] = round(time.time() - t0, 3)
-            logger.info(
-                "llm_parse_complete",
-                rooms=len(spec.rooms),
-                total_area=spec.total_target_area,
-                generation_id=generation_id,
-                model=validated_model,
-                provider=validated_provider,
-            )
-        except Exception as e:
-            logger.error("llm_parse_failed", error=str(e))
-            return {
-                "generation_id": generation_id,
-                "floor_plan": None,
-                "errors": [f"LLM parsing failed: {e}"],
-                "timing": timing,
-            }
+        if generation_mode == "rules":
+            try:
+                from app.services.generation.rule_based_parser import RuleBasedParser
+                spec = RuleBasedParser.parse_prompt_to_spec(
+                    prompt=prompt,
+                    plot_width_m=plot_width_m,
+                    plot_depth_m=plot_depth_m,
+                    locale=locale,
+                    zone_id=zone_id,
+                )
+                timing["rule_parse_s"] = round(time.time() - t0, 3)
+                logger.info(
+                    "rule_based_parse_complete",
+                    rooms=len(spec.rooms),
+                    total_area=spec.total_target_area,
+                    generation_id=generation_id,
+                    mode="rules",
+                )
+            except Exception as e:
+                logger.error("rule_based_parse_failed", error=str(e))
+                return {
+                    "generation_id": generation_id,
+                    "floor_plan": None,
+                    "errors": [f"Rule-based parsing failed: {e}"],
+                    "timing": timing,
+                }
+        else:
+            try:
+                from app.services.llm.providers import validate_model_selection
+                validated_provider, validated_model = validate_model_selection(model, provider)
+                llm_client = LLMClient(provider=validated_provider, model=validated_model)
+                spec = await llm_client.parse_nl_to_spec(
+                    prompt, plot_width_m, plot_depth_m, locale
+                )
+                timing["llm_parse_s"] = round(time.time() - t0, 3)
+                logger.info(
+                    "llm_parse_complete",
+                    rooms=len(spec.rooms),
+                    total_area=spec.total_target_area,
+                    generation_id=generation_id,
+                    model=validated_model,
+                    provider=validated_provider,
+                )
+            except Exception as e:
+                logger.error("llm_parse_failed", error=str(e))
+                return {
+                    "generation_id": generation_id,
+                    "floor_plan": None,
+                    "errors": [f"LLM parsing failed: {e}"],
+                    "timing": timing,
+                }
 
-        # Inject zone_id if provided and LLM didn't set it
+        # Inject zone_id if provided and spec didn't set it
         if zone_id and not spec.zone_id:
             spec.zone_id = zone_id
 
@@ -253,7 +288,13 @@ class GenerationPipeline:
 
         # Continue with parsed spec
         return await self.generate_from_spec(
-            spec, generation_id, run_compliance, generator, timing, errors
+            spec=spec,
+            generation_id=generation_id,
+            run_compliance=run_compliance,
+            generator=generator,
+            timing=timing,
+            errors=errors,
+            compliance_mode=compliance_mode,
         )
 
     async def generate_from_spec(
@@ -264,6 +305,7 @@ class GenerationPipeline:
         generator: str = "housediffusion",
         timing: dict | None = None,
         errors: list | None = None,
+        compliance_mode: str = "rules",
     ) -> dict:
         """
         Generate from an already-parsed FloorPlanSpec.
@@ -399,11 +441,12 @@ class GenerationPipeline:
             t0 = time.time()
             if self.compliance_checker:
                 try:
+                    run_llm_flag = (compliance_mode == "llm") and settings.compliance_run_llm
                     compliance_result = await self.compliance_checker.check(
                         plan=floor_plan,
                         zone_id=spec.zone_id or settings.default_zone_id or None,
                         locale=spec.locale,
-                        run_llm=settings.compliance_run_llm,
+                        run_llm=run_llm_flag,
                     )
                     timing["compliance_s"] = round(time.time() - t0, 3)
                     logger.info(
@@ -411,6 +454,8 @@ class GenerationPipeline:
                         is_compliant=compliance_result.is_compliant,
                         violations=len(compliance_result.violations),
                         generation_id=generation_id,
+                        compliance_mode=compliance_mode,
+                        run_llm=run_llm_flag,
                     )
                 except Exception as e:
                     logger.warning("compliance_check_failed", error=str(e))

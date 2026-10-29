@@ -33,6 +33,15 @@ class GenerateRequest(BaseModel):
     # Free-tier AI model selection (e.g. 'gemini-2.5-flash', 'qwen-2.5-32b', 'grok-beta', 'ollama:qwen2.5')
     model: str | None = Field(None, description="Requested AI model identifier")
     provider: str | None = Field(None, description="Requested AI provider (e.g. 'gemini', 'groq', 'xai', 'ollama')")
+    # Generation and compliance engine modes: 'rules' (deterministic, no LLM) or 'llm' (AI model)
+    generation_mode: str | None = Field(
+        "rules",
+        description="Generation parsing mode: 'rules' (deterministic, zero LLM, instant) or 'llm' (AI model)",
+    )
+    compliance_mode: str | None = Field(
+        "rules",
+        description="Compliance verification mode: 'rules' (deterministic building code checks) or 'llm' (AI reasoning)",
+    )
     # When provided the generated blueprint is durably persisted under this project
     # in the Neo4j graph and survives restarts.  The project must already exist.
     # If omitted the result is stored in the in-process plan_store only (session-scoped).

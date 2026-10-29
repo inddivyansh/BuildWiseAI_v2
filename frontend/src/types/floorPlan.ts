@@ -141,6 +141,8 @@ export interface GenerateRequest {
   generator?: string;
   model?: string;
   provider?: string;
+  generation_mode?: "rules" | "llm";
+  compliance_mode?: "rules" | "llm";
 }
 
 export interface GenerateResponse {

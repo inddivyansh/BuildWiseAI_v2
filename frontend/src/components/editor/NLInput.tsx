@@ -15,6 +15,7 @@ import { api } from "@/lib/api";
 export function NLInput({ projectId }: { projectId?: string } = {}) {
   const router = useRouter();
   const [text, setText] = useState("");
+  const [engineMode, setEngineMode] = useState<"rules" | "llm">("rules");
   const { currentPlan, isGenerating } = useFloorPlanStore();
   const { selectedModelId, getSelectedModel } = useModelStore();
 
@@ -51,7 +52,7 @@ export function NLInput({ projectId }: { projectId?: string } = {}) {
         {
           onSuccess: () => {
             setText("");
-            // Auto-run compliance after edit
+            // Auto-run compliance after edit with rules mode
             complianceCheck.mutate({});
           },
         },
@@ -77,6 +78,8 @@ export function NLInput({ projectId }: { projectId?: string } = {}) {
           project_id: targetProjectId,
           model: selectedModelId,
           provider: activeModel?.provider,
+          generation_mode: engineMode,
+          compliance_mode: engineMode,
         },
         {
           onSuccess: (data) => {
@@ -89,7 +92,7 @@ export function NLInput({ projectId }: { projectId?: string } = {}) {
         },
       );
     }
-  }, [text, isPending, isEdit, currentPlan, editAction, generateAction, complianceCheck, projectId, router, selectedModelId, getSelectedModel]);
+  }, [text, isPending, isEdit, currentPlan, editAction, generateAction, complianceCheck, projectId, router, selectedModelId, getSelectedModel, engineMode]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
@@ -118,7 +121,20 @@ export function NLInput({ projectId }: { projectId?: string } = {}) {
           {isEdit ? "Edit" : "Generate"}
         </Badge>
 
-        <ModelSelector compact />
+        <button
+          type="button"
+          onClick={() => setEngineMode(engineMode === "rules" ? "llm" : "rules")}
+          className={`shrink-0 text-[10px] px-2 py-0.5 rounded border font-mono transition-colors ${
+            engineMode === "rules"
+              ? "bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20"
+              : "bg-accent/10 border-accent/30 text-accent hover:bg-accent/20"
+          }`}
+          title="Toggle Rule-Based (Offline) vs AI LLM Mode"
+        >
+          {engineMode === "rules" ? "⚡ Rules" : "🤖 AI"}
+        </button>
+
+        {engineMode === "llm" && <ModelSelector compact />}
 
         <input
           type="text"

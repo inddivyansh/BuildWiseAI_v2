@@ -215,6 +215,32 @@ export default function UnifiedDashboard() {
                   Generate
                 </Button>
               </form>
+
+              {/* Quick Sample Prompts */}
+              <div className="mt-2.5 flex flex-wrap gap-1.5">
+                <span className="text-[10px] text-ink-dim self-center mr-1">Try:</span>
+                <button
+                  type="button"
+                  onClick={() => setNlPrompt("3-bedroom bungalow on a 15x20m lot with open kitchen and garage")}
+                  className="text-[10px] px-2 py-0.5 rounded-full bg-surface-2 hover:bg-accent/15 hover:text-accent border border-edge text-ink-dim transition-colors"
+                >
+                  🏡 3-Bed Bungalow (15×20m)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setNlPrompt("4-bedroom 2-story house with master suite, office, and double garage on an 18x25m lot")}
+                  className="text-[10px] px-2 py-0.5 rounded-full bg-surface-2 hover:bg-accent/15 hover:text-accent border border-edge text-ink-dim transition-colors"
+                >
+                  🏢 4-Bed 2-Story (18×25m)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setNlPrompt("Compact 2-bedroom home with open-plan living and patio on a 12x16m lot")}
+                  className="text-[10px] px-2 py-0.5 rounded-full bg-surface-2 hover:bg-accent/15 hover:text-accent border border-edge text-ink-dim transition-colors"
+                >
+                  🛋️ 2-Bed Suite (12×16m)
+                </button>
+              </div>
             </div>
 
             <div className="mt-6 pt-5 border-t border-edge/60 flex flex-wrap items-center gap-3">

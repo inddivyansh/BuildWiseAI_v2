@@ -61,33 +61,41 @@ async def generate_floor_plan(
     compliance: ComplianceResult | None = None
     floor_plan: GeneratedFloorPlan | None = None
 
-    # Validate requested model if provided (rejects unknown or premium models)
-    from app.services.llm.providers import validate_model_selection
-    from fastapi import HTTPException
-    try:
-        validated_provider, validated_model = validate_model_selection(
-            request_body.model, request_body.provider
-        )
-    except ValueError as val_err:
-        raise HTTPException(status_code=400, detail=str(val_err))
+    generation_mode = request_body.generation_mode or "rules"
+    compliance_mode = request_body.compliance_mode or "rules"
 
-    # Initialize client for availability check
-    from app.services.llm.client import LLMClient
-    active_llm = LLMClient(provider=validated_provider, model=validated_model)
-    llm_ok, err_msg = await active_llm.verify_availability()
+    validated_provider = None
+    validated_model = None
 
-    if not llm_ok:
-        status_code = (
-            429 if ("429" in (err_msg or "") or "quota" in (err_msg or "").lower())
-            else 503 if ("503" in (err_msg or "") or "unavailable" in (err_msg or "").lower())
-            else 502
-        )
-        raise HTTPException(
-            status_code=status_code,
-            detail=err_msg or f"{validated_provider} ({validated_model}) is unresponsive. Please check your API quota or retry shortly.",
-        )
+    # Only validate and ping LLM if either generation or compliance explicitly requested LLM mode
+    needs_llm = (generation_mode == "llm") or (request_body.run_compliance and compliance_mode == "llm")
+    if needs_llm:
+        from app.services.llm.providers import validate_model_selection
+        from fastapi import HTTPException
+        try:
+            validated_provider, validated_model = validate_model_selection(
+                request_body.model, request_body.provider
+            )
+        except ValueError as val_err:
+            raise HTTPException(status_code=400, detail=str(val_err))
 
-    # Full pipeline with validated LLM
+        # Initialize client for availability check
+        from app.services.llm.client import LLMClient
+        active_llm = LLMClient(provider=validated_provider, model=validated_model)
+        llm_ok, err_msg = await active_llm.verify_availability()
+
+        if not llm_ok:
+            status_code = (
+                429 if ("429" in (err_msg or "") or "quota" in (err_msg or "").lower())
+                else 503 if ("503" in (err_msg or "") or "unavailable" in (err_msg or "").lower())
+                else 502
+            )
+            raise HTTPException(
+                status_code=status_code,
+                detail=err_msg or f"{validated_provider} ({validated_model}) is unresponsive. Please check your API quota or switch to Rule-Based mode.",
+            )
+
+    # Full pipeline with requested generation and compliance modes
     result = await pipeline.generate_from_nl(
         prompt=request_body.prompt,
         plot_width_m=request_body.plot_width_m,
@@ -98,6 +106,8 @@ async def generate_floor_plan(
         zone_id=request_body.zone_id,
         model=validated_model,
         provider=validated_provider,
+        generation_mode=generation_mode,
+        compliance_mode=compliance_mode,
     )
 
     floor_plan = result.get("floor_plan")
